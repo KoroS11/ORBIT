@@ -2,10 +2,10 @@
 
 **Sense · Attribute · Decide.**
 
-> *"We must defend U.S. space capabilities, and we must protect our forces from space-enabled attack."*
-> — CSO Gen. B. Chance Saltzman, *Space Warfighting*, March 2025
+> *""Development of missiles does not mean that I am not peaceful. All that we were doing was to create capability since even to promote peace we need strength"*
+> — Dr. A.P.J. Abdul Kalam, *Missile Man of India*, March 2025
 
-Space supports **every** fight. CANOPY lets the fight support space.
+Space supports **every** fight. ORBIT lets the fight support space.
 
 Virtually every ground operation runs on data piped down from orbit; think ISR, comms, GEOINT, imagery, GPS timing, etc. Adversaries know it: Iran has demonstrated it can sever ~80% of Starlink access to civilians inside its borders, and China fields inspector satellites that shadow allied assets and has physically tugged targets into graveyard orbits. Lose the uplink, lose the fight — and operators today has no single picture of who is doing what to which asset, or what they are authorized to do about it in the next minute.
 
@@ -15,7 +15,6 @@ CANOPY is a tactical multi-domain awareness and decision-support system for the 
 - **Sense to decide in under 20 seconds.**
 - 100% local LLM inference via Ollama — no cloud, no PII egress. Designed to be hosted entirely on-prem.
 
-YouTube demo [here](https://www.youtube.com/watch?v=NzDcP5XryC4).
 
 ---
 
