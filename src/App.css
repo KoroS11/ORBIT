@@ -2833,15 +2833,15 @@
 @media (prefers-reduced-motion: no-preference) {
   .brigade-shell::after,
   .operator-shell::after {
-    animation: canopy-ambient 18s ease-in-out infinite alternate;
+    animation: orbit-ambient 18s ease-in-out infinite alternate;
   }
 
   .map-stage::before {
-    animation: canopy-scan 14s linear infinite;
+    animation: orbit-scan 14s linear infinite;
   }
 }
 
-@keyframes canopy-ambient {
+@keyframes orbit-ambient {
   from {
     transform: translate3d(-1.5%, -1%, 0) rotate(0deg);
   }
@@ -2851,7 +2851,7 @@
   }
 }
 
-@keyframes canopy-scan {
+@keyframes orbit-scan {
   from {
     background-position: 0 -160px, 0 0;
   }

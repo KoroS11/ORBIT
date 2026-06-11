@@ -5,15 +5,15 @@ import asyncio
 
 import pytest
 
-from canopy.services.bus import InProcessBus
-from canopy.services.fusion import FusionService
-from canopy.services.schemas.events import (
+from orbit.services.bus import InProcessBus
+from orbit.services.fusion import FusionService
+from orbit.services.schemas.events import (
     Location,
     Provenance,
     ReasoningTrace,
     Signal,
 )
-from canopy.services.traces import Tracer
+from orbit.services.traces import Tracer
 
 
 def _signal() -> Signal:

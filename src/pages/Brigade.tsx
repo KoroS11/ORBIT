@@ -10,12 +10,12 @@ import { ScenarioRail } from '../components/ScenarioRail'
 import { ScenarioTimeline } from '../components/ScenarioTimeline'
 import { StressMode } from '../components/StressMode'
 import { defaultScenario, scenarios } from '../data/scenarioLibrary'
-import { useCanopyMissionState } from '../hooks/useCanopyMissionState'
-import { useCanopySocket } from '../hooks/useCanopySocket'
+import { useOrbitMissionState } from '../hooks/useOrbitMissionState'
+import { useOrbitSocket } from '../hooks/useOrbitSocket'
 import { triggerReplay } from '../hooks/useEngineSocket'
 import { useEventStore } from '../store/eventStore'
 import type { PlaybackStatus } from '../types/playback'
-import type { Attribution, Decision, Signal } from '../types/canopy'
+import type { Attribution, Decision, Signal } from '../types/orbit'
 
 const fieldDurationFloorMs = 12 * 60 * 1000
 const fieldDurationScale = 1
@@ -91,7 +91,7 @@ const beatDecision: Decision = {
 }
 
 export function Brigade() {
-  const socketState = useCanopySocket()
+  const socketState = useOrbitSocket()
   const [beatIndex] = useState(1)
   const [isMapAutoFocusEnabled, setIsMapAutoFocusEnabled] = useState(true)
   const [activeScenarioId, setActiveScenarioId] = useState(defaultScenario.id)
@@ -188,7 +188,7 @@ export function Brigade() {
       approvedEventIds instanceof Set &&
       approvedEventIds.has(approvalEvent.id)
     )
-  const missionState = useCanopyMissionState(signals, socketState.uiEvents, {
+  const missionState = useOrbitMissionState(signals, socketState.uiEvents, {
     enableMapAutoFocus: isMapAutoFocusEnabled,
     mapFocusMinConfidence: 0,
   })
@@ -197,7 +197,7 @@ export function Brigade() {
     <main className="brigade-shell">
       <header className="app-header">
         <div>
-          <p className="app-header__eyebrow">CANOPY</p>
+          <p className="app-header__eyebrow">ORBIT</p>
           <h1>Brigade COP</h1>
         </div>
         <div className="app-header__right">

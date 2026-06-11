@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from canopy.services.attrib import AttribService
-from canopy.services.bus import InProcessBus
-from canopy.services.fusion import FusionService
-from canopy.services.kb import KB
-from canopy.services.llm.stub import StubLLMClient
-from canopy.services.schemas.events import (
+from orbit.services.attrib import AttribService
+from orbit.services.bus import InProcessBus
+from orbit.services.fusion import FusionService
+from orbit.services.kb import KB
+from orbit.services.llm.stub import StubLLMClient
+from orbit.services.schemas.events import (
     Anomaly,
     Attribution,
     Location,
@@ -24,7 +24,7 @@ from canopy.services.schemas.events import (
     ReasoningTrace,
     Signal,
 )
-from canopy.services.traces import Tracer
+from orbit.services.traces import Tracer
 
 ROOT = Path(__file__).resolve().parent.parent
 KB_FILE = ROOT / "data" / "kb_seed_entries.json"

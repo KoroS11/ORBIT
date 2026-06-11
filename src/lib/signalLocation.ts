@@ -1,5 +1,5 @@
 import { toPoint as mgrsToPoint } from 'mgrs'
-import type { Signal, SignalLocation } from '../types/canopy'
+import type { Signal, SignalLocation } from '../types/orbit'
 
 export type LonLat = [number, number]
 

@@ -1,4 +1,4 @@
-import type { Decision, UIEvent } from '../types/canopy'
+import type { Decision, UIEvent } from '../types/orbit'
 
 type ApproveBannerProps = {
   decision: Decision | null

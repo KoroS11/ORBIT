@@ -81,7 +81,7 @@ ORBIT reads `ORBIT_OLLAMA_URL` (default `http://localhost:11434`) and `ORBIT_OLL
 ### Backend gateway
 In one terminal, run the following to start the backend:
 ```bash
-uv run uvicorn canopy.api:app --host 0.0.0.0 --port 8000
+uv run uvicorn orbit.api:app --host 0.0.0.0 --port 8000
 ```
 
 The gateway boots the in-process bus, the three services, and exposes:
@@ -95,7 +95,7 @@ npm install
 npm run dev   # http://localhost:5173
 ```
 
-Set `VITE_CANOPY_API_URL=http://localhost:8000` in `.env.local` if the gateway runs on a different host.
+Set `VITE_ORBIT_API_URL=http://localhost:8000` in `.env.local` if the gateway runs on a different host.
 You can view and interact with the frontend by going to `http://localhost:5173` in a browser.
 
 ### One-shot verification
@@ -142,7 +142,7 @@ The reasoning panel will surface `[stress] PNT data unavailable, lowering confid
 ## Repo layout
 
 ```
-canopy/                  # Python engine (services, schemas, API gateway)
+orbit/                  # Python engine (services, schemas, API gateway)
   api/                 # FastAPI gateway + WebSocket fanout
   services/            # fusion, attrib (multi-agent), decide (tool-using), llm, orbit, kb, traces
 src/                   # React + Cesium + MapLibre console
@@ -162,3 +162,18 @@ kb/                    # capability + routing knowledge base
 ORBIT ships with its own evaluation harness ([`bench/`](bench/)), which contains 11 hand-labelled seed scenarios plus ~40 procedural variants, each with ground-truth `expected_actor` / `expected_action` / `expected_authority` / `expected_band` labels. `bench/run.py` boots the engine in-process, replays every scenario, and produces a scorecard covering attribution accuracy, action match, authority routing, calibration (correct ↔ confidence band), and p50/p95 latency. 
 
 We're aware that small open-weight models leave headroom on multi-domain attribution compared to large cloud-hosted LLMs. We're interested in pursuing further research in this direction and are happy to move forward with the right collaborators on this.
+<<<<<<< HEAD
+=======
+
+## Partnering with frontier labs
+
+ORBIT is built around the assumption that the model lives at the edge but the *quality* of attribution and decision routing tracks directly with the underlying model. **We're actively seeking partnerships with frontier labs** to push two things:
+
+1. **Edge-first model distillation** — a Gemma-class (or smaller) model fine-tuned on the multi-domain reasoning, tool-use, and red-team-vs-reconciler patterns ORBIT exercises. Today we use the off-the-shelf weights; we'd like to close the gap to frontier-class reasoning at sub-20 GB VRAM.
+2. **Defensible evaluation** — extending the benchmark with adversarial scenarios, calibration probes, and authority-routing edge cases that frontier labs care about for safety and reliability research, with results we can publish jointly.
+
+If you're at a frontier lab and you find this interesting, we'd love to hear from you! In this project, we'll publish an initial (truncated) version of the benchmark; future updates to the benchmark will move to a dedicated repo (to be linked here in the future).
+
+## Contact
+For any questions regarding this project, please contact Brian via [bwu.ai](https://bwu.ai).
+>>>>>>> 1ec0156 (refactor: rename CANOPY to ORBIT throughout codebase)

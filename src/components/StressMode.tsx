@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { Domain } from '../types/canopy'
+import type { Domain } from '../types/orbit'
 
 const API_URL =
-  import.meta.env.VITE_CANOPY_API_URL ?? 'http://localhost:8000'
+  import.meta.env.VITE_ORBIT_API_URL ?? 'http://localhost:8000'
 
 const ALL_DOMAINS: Domain[] = [
   'sda',

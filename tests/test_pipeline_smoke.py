@@ -4,14 +4,14 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-from canopy.services.attrib import AttribService
-from canopy.services.bus import InProcessBus
-from canopy.services.decide import DecideService
-from canopy.services.fusion import FusionService
-from canopy.services.kb import KB
-from canopy.services.llm.stub import StubLLMClient
-from canopy.services.scenario_replay import ScenarioReplayService
-from canopy.services.schemas.events import (
+from orbit.services.attrib import AttribService
+from orbit.services.bus import InProcessBus
+from orbit.services.decide import DecideService
+from orbit.services.fusion import FusionService
+from orbit.services.kb import KB
+from orbit.services.llm.stub import StubLLMClient
+from orbit.services.scenario_replay import ScenarioReplayService
+from orbit.services.schemas.events import (
     Anomaly,
     Attribution,
     Decision,
@@ -20,7 +20,7 @@ from canopy.services.schemas.events import (
     Signal,
     UIEvent,
 )
-from canopy.services.ui_events import UIEventService
+from orbit.services.ui_events import UIEventService
 
 ROOT = Path(__file__).resolve().parent.parent
 KB_FILE = ROOT / "data" / "kb_seed_entries.json"
@@ -108,7 +108,7 @@ async def test_signals_flow_through_to_ui_events() -> None:
         _signal(
             domain="rf_ew",
             event_type="rf_interference",
-            sig_id="canopy-beat2-001",
+            sig_id="orbit-beat2-001",
         ),
     ]
     collected = await _drive_pipeline(bus, signals)
@@ -142,7 +142,7 @@ async def test_rpo_signal_produces_request_authority_decision() -> None:
     bus = InProcessBus()
     signals = [
         Signal(
-            id="canopy-beat47-002",
+            id="orbit-beat47-002",
             ts=datetime(2026, 6, 18, 14, 42, 10, tzinfo=UTC),
             domain="orbit",
             source="rpo-close-approach-overlay",
@@ -153,9 +153,9 @@ async def test_rpo_signal_produces_request_authority_decision() -> None:
                 "event_type": "rpo_close_approach",
                 "summary": "Close approach inside watch box",
                 "asset": "UNKNOWN-RSO-441",
-                "observables": {"miss_distance_km": 8.6, "target": "CANOPY-LEO-07"},
+                "observables": {"miss_distance_km": 8.6, "target": "ORBIT-LEO-07"},
             },
-            provenance=Provenance(source_id="canopy-demo-feed-worker"),
+            provenance=Provenance(source_id="orbit-demo-feed-worker"),
         )
     ]
     collected = await _drive_pipeline(bus, signals)

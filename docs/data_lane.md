@@ -1,6 +1,6 @@
-# CANOPY Data Lane
+# ORBIT Data Lane
 
-The data lane owns the contract between sources and the CANOPY engine. Every
+The data lane owns the contract between sources and the ORBIT engine. Every
 adapter, real or mock, emits a canonical `Signal`; downstream services convert
 `Signal -> Anomaly -> Attribution -> Decision -> UIEvent`.
 

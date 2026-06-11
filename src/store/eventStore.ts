@@ -11,7 +11,7 @@ import type {
   Signal,
   UIEvent,
   ViewMode,
-} from "../types/canopy";
+} from "../types/orbit";
 
 const RING_BUFFER = 200;
 const TRACE_BUFFER = 500;
@@ -277,7 +277,7 @@ export const useEventStore = create<EventState>()(
       // every tab switch). Persisting the engine event ring buffers means
       // the reasoning panel and event timeline keep their history when
       // the user moves between pages.
-      name: "canopy-event-store",
+      name: "orbit-event-store",
       version: 2,
       storage: createJSONStorage(() => sessionStorage),
       // Skip live UI/connection state and the Set (Sets don't survive

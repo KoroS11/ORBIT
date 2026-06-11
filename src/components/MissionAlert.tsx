@@ -1,6 +1,6 @@
 import { commanderSignalSummary, signalKindLabel } from '../lib/commanderLanguage'
 import { signalEffectLabel, signalEffectState } from '../lib/signalEffects'
-import type { Signal } from '../types/canopy'
+import type { Signal } from '../types/orbit'
 import type { PlaybackStatus } from '../types/playback'
 
 type MissionAlertProps = {

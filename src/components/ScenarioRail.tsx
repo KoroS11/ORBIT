@@ -3,7 +3,7 @@ import { MissionSummary } from './MissionSummary'
 import { OperatorActionPanel } from './OperatorActionPanel'
 import { commanderSignalSummary, domainLabel } from '../lib/commanderLanguage'
 import type { PlaybackStatus } from '../types/playback'
-import type { Attribution, Decision, Signal, UIEvent } from '../types/canopy'
+import type { Attribution, Decision, Signal, UIEvent } from '../types/orbit'
 
 type ScenarioRailProps = {
   activeScenarioId: string

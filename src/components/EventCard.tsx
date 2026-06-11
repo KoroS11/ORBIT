@@ -1,5 +1,5 @@
 import { useEventStore } from "../store/eventStore";
-import type { UIEvent } from "../types/canopy";
+import type { UIEvent } from "../types/orbit";
 
 interface Props {
   event: UIEvent;

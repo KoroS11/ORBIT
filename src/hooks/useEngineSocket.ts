@@ -6,12 +6,12 @@ import type {
   Signal,
   UIEvent,
   WSEnvelope,
-} from "../types/canopy";
+} from "../types/orbit";
 
 // Backend URLs. Vite proxies during dev would also work, but for a hackathon
 // demo a hard-coded localhost is fine.
 const API_URL =
-  import.meta.env.VITE_CANOPY_API_URL ?? "http://localhost:8000";
+  import.meta.env.VITE_ORBIT_API_URL ?? "http://localhost:8000";
 const WS_URL =
   API_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
 
@@ -20,16 +20,16 @@ const FIXTURE_REPLAY_INTERVAL_MS = 3000;
 const FIXTURE_SIGNAL_LOCATIONS: Record<string, { lat: number; lng: number; label: string }> = {
   // Synthesised marker positions for fixture mode — keeps the AOR map alive
   // when the engine isn't running and we're replaying expected_ui_events.json.
-  "canopy-beat1-001": { lat: 21.3, lng: 142.8, label: "LEO track over Western Pacific" },
-  "canopy-beat1-002": { lat: 20.1, lng: 121.7, label: "Luzon Strait" },
-  "canopy-beat2-001": { lat: 13.5, lng: 144.8, label: "Guam RF site" },
-  "canopy-beat2-002": { lat: 13.5, lng: 144.8, label: "Guam ground gateway" },
-  "canopy-beat2-003": { lat: 18.5, lng: 121.0, label: "Northern Luzon monitor" },
-  "canopy-beat2-004": { lat: 15.0, lng: 145.6, label: "Tinian launch corridor" },
-  "canopy-beat47-001": { lat: 13.5, lng: 144.8, label: "Guam SATCOM gateway" },
-  "canopy-beat47-002": { lat: 14.9, lng: 132.1, label: "CANOPY-LEO-07 relative motion frame" },
-  "canopy-beat47-003": { lat: 14.5, lng: 133.8, label: "CANOPY-LEO-07 downlink footprint" },
-  "canopy-beat47-004": { lat: 13.5, lng: 144.8, label: "Guam RF site" },
+  "orbit-beat1-001": { lat: 21.3, lng: 142.8, label: "LEO track over Western Pacific" },
+  "orbit-beat1-002": { lat: 20.1, lng: 121.7, label: "Luzon Strait" },
+  "orbit-beat2-001": { lat: 13.5, lng: 144.8, label: "Guam RF site" },
+  "orbit-beat2-002": { lat: 13.5, lng: 144.8, label: "Guam ground gateway" },
+  "orbit-beat2-003": { lat: 18.5, lng: 121.0, label: "Northern Luzon monitor" },
+  "orbit-beat2-004": { lat: 15.0, lng: 145.6, label: "Tinian launch corridor" },
+  "orbit-beat47-001": { lat: 13.5, lng: 144.8, label: "Guam SATCOM gateway" },
+  "orbit-beat47-002": { lat: 14.9, lng: 132.1, label: "ORBIT-LEO-07 relative motion frame" },
+  "orbit-beat47-003": { lat: 14.5, lng: 133.8, label: "ORBIT-LEO-07 downlink footprint" },
+  "orbit-beat47-004": { lat: 13.5, lng: 144.8, label: "Guam RF site" },
 };
 
 interface FixtureFile {

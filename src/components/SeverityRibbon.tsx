@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useEventStore } from "../store/eventStore";
-import type { UISeverity } from "../types/canopy";
+import type { UISeverity } from "../types/orbit";
 
 const SEVERITY_RANK: Record<UISeverity, number> = {
   low: 0,

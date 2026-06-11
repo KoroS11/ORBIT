@@ -1,6 +1,6 @@
-# CANOPY Signal Schema Contract
+# ORBIT Signal Schema Contract
 
-Every CANOPY adapter emits a canonical Signal envelope. The envelope is stable
+Every ORBIT adapter emits a canonical Signal envelope. The envelope is stable
 across real, mock, and synthetic feeds so downstream services can process
 signals before they understand a domain-specific payload.
 

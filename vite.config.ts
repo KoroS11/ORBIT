@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const cesiumSource = join(dirname(require.resolve('cesium/package.json')), 'Build/Cesium')
+const cesiumSource = join(dirname(require.resolve('cesium/package.json')), 'Build/Cesium').replace(/\\/g, '/')
 const cesiumBaseUrl = 'cesiumStatic'
 
 // https://vite.dev/config/

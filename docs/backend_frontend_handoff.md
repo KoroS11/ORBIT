@@ -1,4 +1,4 @@
-# CANOPY Data Handoff
+# ORBIT Data Handoff
 
 This handoff is for teammates building the backend and frontend while the data
 lane remains independent.
@@ -55,12 +55,12 @@ Use it for:
 
 ## Local WebSocket Bridge
 
-The experimental bridge lives at `canopy.api:app`.
+The experimental bridge lives at `orbit.api:app`.
 
 Run it with:
 
 ```bash
-python -m uvicorn canopy.api:app --host 127.0.0.1 --port 8000
+python -m uvicorn orbit.api:app --host 127.0.0.1 --port 8000
 ```
 
 It exposes:
@@ -78,7 +78,7 @@ WS   /ws/brigade
 { "type": "ui_event", "data": UIEvent }
 ```
 
-The frontend uses `VITE_CANOPY_WS_URL`, defaulting in dev to:
+The frontend uses `VITE_ORBIT_WS_URL`, defaulting in dev to:
 
 ```txt
 ws://127.0.0.1:8000/ws/brigade

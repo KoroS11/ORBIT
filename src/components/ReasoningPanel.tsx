@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useEventStore } from '../store/eventStore'
-import type { ReasoningTrace, TraceStage } from '../types/canopy'
+import type { ReasoningTrace, TraceStage } from '../types/orbit'
 
 const STAGE_COLORS: Record<TraceStage, string> = {
   fusion: 'var(--cyan)',

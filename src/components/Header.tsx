@@ -1,5 +1,5 @@
 import { useEventStore } from "../store/eventStore";
-import type { ViewMode } from "../types/canopy";
+import type { ViewMode } from "../types/orbit";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { SeverityRibbon } from "./SeverityRibbon";
 
@@ -15,7 +15,7 @@ export function Header() {
   return (
     <header className="app-header">
       <div className="app-header__brand">
-        CANOPY
+        ORBIT
         <span className="app-header__brand-sub">multi-domain · space</span>
       </div>
       <SeverityRibbon />

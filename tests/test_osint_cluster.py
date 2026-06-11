@@ -12,9 +12,9 @@ import asyncio
 import numpy as np
 import pytest
 
-from canopy.services.bus import InProcessBus
-from canopy.services.osint_cluster import OsintClusterService
-from canopy.services.schemas.events import (
+from orbit.services.bus import InProcessBus
+from orbit.services.osint_cluster import OsintClusterService
+from orbit.services.schemas.events import (
     Anomaly,
     Location,
     OsintEmbeddingSnapshot,
@@ -22,7 +22,7 @@ from canopy.services.schemas.events import (
     ReasoningTrace,
     Signal,
 )
-from canopy.services.traces import Tracer
+from orbit.services.traces import Tracer
 
 
 class _MockEncoder:

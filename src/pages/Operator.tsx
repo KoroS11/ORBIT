@@ -2,7 +2,7 @@ import { useEventStore } from '../store/eventStore'
 import { ActionLog } from '../components/ActionLog'
 import { EmbeddingViz } from '../components/EmbeddingViz'
 import { ReasoningPanel } from '../components/ReasoningPanel'
-import { useCanopySocket } from '../hooks/useCanopySocket'
+import { useOrbitSocket } from '../hooks/useOrbitSocket'
 
 export function Operator() {
   // Open the same WebSocket Brigade uses so live engine output streams
@@ -10,7 +10,7 @@ export function Operator() {
   // Without this hook the page is read-only on whatever sessionStorage
   // had cached, so the reasoning panel and queues only "update" when
   // the user toggles back to Brigade and a re-render fires.
-  useCanopySocket()
+  useOrbitSocket()
 
   const signals = useEventStore((s) => s.signals)
   const anomalies = useEventStore((s) => s.anomalies)
@@ -20,7 +20,7 @@ export function Operator() {
     <main className="operator-shell">
       <header className="app-header">
         <div>
-          <p className="app-header__eyebrow">CANOPY / Operator</p>
+          <p className="app-header__eyebrow">ORBIT / Operator</p>
           <h1>Fusion Console</h1>
         </div>
         <a href="/brigade">Brigade View</a>
