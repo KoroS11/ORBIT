@@ -50,3 +50,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Bench-generated scenario variants
+bench/scorecard.json
+bench/compare/
