@@ -1,4 +1,4 @@
-# CANOPY: Cross-domain Attribution and Orbital Protection sYstem
+# ORBIT: Cross-domain Attribution and Orbital Protection sYstem
 
 **Sense · Attribute · Decide.**
 
