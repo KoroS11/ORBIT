@@ -9,7 +9,7 @@ Space supports **every** fight. ORBIT lets the fight support space.
 
 Virtually every ground operation runs on data piped down from orbit; think ISR, comms, GEOINT, imagery, GPS timing, etc. Adversaries know it: Iran has demonstrated it can sever ~80% of Starlink access to civilians inside its borders, and China fields inspector satellites that shadow allied assets and has physically tugged targets into graveyard orbits. Lose the uplink, lose the fight — and operators today has no single picture of who is doing what to which asset, or what they are authorized to do about it in the next minute.
 
-CANOPY is a tactical multi-domain awareness and decision-support system for the brigade-level analyst, operator, and commander. It fuses orbital, RF/EW, cyber, PNT, SATCOM, drone, HUMINT, and OSINT signals into a single live picture, attributes the threat, recommends an authorized response, and visualizes the outcome — all on hardware that fits in a forward operating base.
+ORBIT is a tactical multi-domain awareness and decision-support system for the brigade-level analyst, operator, and commander. It fuses orbital, RF/EW, cyber, PNT, SATCOM, drone, HUMINT, and OSINT signals into a single live picture, attributes the threat, recommends an authorized response, and visualizes the outcome — all on hardware that fits in a forward operating base.
 
 - Runs at the **edge** on a single NVIDIA RTX 3090.
 - **Sense to decide in under 20 seconds.**
