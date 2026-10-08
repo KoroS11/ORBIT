@@ -40,16 +40,19 @@ The frontend is a React + Cesium + MapLibre console with two views:
 
 | Source | Domain | Notes |
 |---|---|---|
-| **CelesTrak GP catalog** ([`data/source_registry.json`](data/source_registry.json), [`scripts/fetch_orbital_cache.py`](scripts/fetch_orbital_cache.py)) | orbit / SDA | Authoritative TLE/OMM feeds for GEO, GPS-OPS, Starlink, Planet, and the GPZ+ "objects of interest" group. Pulled directly from `celestrak.org/NORAD/elements/gp.php`. Skyfield-backed SGP4 propagation produces real close-approach geometry. |
-| **N2YO position feed** ([`public/orbital/`](public/orbital/), [`data/tle_cache.json`](data/tle_cache.json)) | orbit / SDA | Per-satellite live position polls for AEHF, MUOS, WGS, SBIRS, GSSAP, GPS-3 (US) and Yaogan / Cosmos (CHN/RUS). Drives the Cesium globe's animated orbital tracks. |
+| **CelesTrak GP catalog** ([`data/source_registry.json`](data/source_registry.json), [`scripts/fetch_orbital_cache.py`](scripts/fetch_orbital_cache.py)) | orbit / SDA | Authoritative TLE/OMM feeds for GEO, GPS-OPS, Starlink, Planet, and the GPZ+ "objects of interest" group, downloaded offline from `celestrak.org`. Skyfield-backed SGP4 propagation evaluates close-approach geometry from the local cache. |
+| **N2YO position feed** ([`public/orbital/`](public/orbital/), [`data/tle_cache.json`](data/tle_cache.json)) | orbit / SDA | Per-satellite position snapshots for AEHF, MUOS, WGS, SBIRS, GSSAP, GPS-3 (US) and Yaogan / Cosmos (CHN/RUS), populated offline by `scripts/fetch_n2yo_satellite.py`. Drives the Cesium globe's animated orbital tracks. |
 | **OSINT corpus** | open-source | Sentence-transformer (`all-MiniLM-L6-v2`, 384-dim) embeddings, cosine-clustered at 0.40, PCA-projected to 2D for the embedding panel. |
-| **Hand-authored scenarios** ([`scenarios/*.jsonl`](scenarios/)) | RF/EW, cyber, PNT, SATCOM, drone, HUMINT | 11 deterministic JSONL beats covering CENTCOM, Army, and regional vignettes. |
+| **Hand-authored scenarios** ([`scenarios/*.jsonl`](scenarios/)) | RF/EW, cyber, PNT, SATCOM, drone, HUMINT | 11 deterministic JSONL beats covering CENTCOM, Army, and regional vignettes replayed by the engine. |
 | **Procedural variants** ([`bench/scenarios/`](bench/)) | synthetic | ~40 perturbations of the 11 seeds (miss distance, lead time, signal mix) for the benchmark harness. |
 | **KB** ([`kb/`](kb/), [`data/kb_seed_entries.json`](data/kb_seed_entries.json)) | tradecraft | Actor capabilities, doctrine references, and routing rules used by `kb.lookup`. |
 
-ORBIT can ingest **live** from both the [CelesTrak](https://celestrak.org) and [N2YO](https://www.n2yo.com) public APIs — `scripts/fetch_orbital_cache.py --mode live` refreshes the TLE catalog directly from CelesTrak, and the N2YO position cache is repopulated on demand from the per-NORAD position-feed endpoint. The on-disk caches in `public/orbital/` and `data/` are the offline fixtures used when the box has no backhaul; switching to live is a single flag.
+In runtime operation:
+- **Signals**: Domain signals come from hand-authored and procedurally generated scenario files replayed through the engine's event bus.
+- **Orbital data**: CelesTrak TLEs and N2YO ephemeris feeds are refreshed by offline scripts into cached files (`data/`, `public/orbital/`) and are not queried at runtime.
+- **Pipeline & models**: The `all-MiniLM-L6-v2` embedding model and the sense/attribute/decide pipeline run for real on that input. The LLM reasoning stage runs the deterministic stub by default, or pluggable Gemini, Ollama, or Anthropic backends when configured.
 
-Every record — real, live, fixture, or synthetic — flows through the same canonical `Signal` schema.
+Every record flows through the same canonical `Signal` schema.
 
 ---
 
