@@ -191,3 +191,62 @@ async def test_gemini_key_in_header_not_in_url() -> None:
     # URL check: fake key must NOT appear in URL
     assert FAKE_KEY not in str(req.url)
     assert "key=" not in str(req.url)
+
+
+async def test_gemini_thinking_budget_sent_when_set() -> None:
+    """thinkingConfig is sent when ORBIT_GEMINI_THINKING_BUDGET is set."""
+    canned_payload = {
+        "actor": "Unknown",
+        "confidence": 0.5,
+        "evidence": ["test"],
+        "kb_citations": [UNCERTAINTY_ANCHOR],
+    }
+    captured_requests: list[httpx.Request] = []
+
+    class _CaptureTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            captured_requests.append(request)
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        thinking_budget=0,
+        transport=_CaptureTransport(),
+    )
+    await client.attribute([_anomaly()])
+
+    assert len(captured_requests) == 1
+    req_body = json.loads(captured_requests[0].content)
+    assert req_body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+
+async def test_gemini_thinking_budget_absent_when_unset(monkeypatch) -> None:
+    """thinkingConfig is omitted when ORBIT_GEMINI_THINKING_BUDGET is unset."""
+    monkeypatch.delenv("ORBIT_GEMINI_THINKING_BUDGET", raising=False)
+    canned_payload = {
+        "actor": "Unknown",
+        "confidence": 0.5,
+        "evidence": ["test"],
+        "kb_citations": [UNCERTAINTY_ANCHOR],
+    }
+    captured_requests: list[httpx.Request] = []
+
+    class _CaptureTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            captured_requests.append(request)
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_CaptureTransport(),
+    )
+    await client.attribute([_anomaly()])
+
+    assert len(captured_requests) == 1
+    req_body = json.loads(captured_requests[0].content)
+    assert "thinkingConfig" not in req_body["generationConfig"]
+

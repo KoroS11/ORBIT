@@ -76,6 +76,7 @@ class GeminiLLMClient(OllamaLLMClient):
         model: str | None = None,
         api_key: str | None = None,
         timeout_s: float | None = None,
+        thinking_budget: int | None = None,
         transport: Any | None = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
@@ -94,8 +95,23 @@ class GeminiLLMClient(OllamaLLMClient):
             else os.environ.get("ORBIT_GEMINI_TIMEOUT_S")
         )
         self._timeout_s = float(raw_timeout) if raw_timeout else 60.0
+        raw_budget = (
+            thinking_budget
+            if thinking_budget is not None
+            else os.environ.get("ORBIT_GEMINI_THINKING_BUDGET")
+        )
+        self._thinking_budget = (
+            int(raw_budget)
+            if raw_budget is not None and str(raw_budget).strip() != ""
+            else None
+        )
         self._transport = transport
-        log.info("gemini: model=%s timeout=%.0fs", self._model, self._timeout_s)
+        log.info(
+            "gemini: model=%s timeout=%.0fs thinking_budget=%s",
+            self._model,
+            self._timeout_s,
+            self._thinking_budget,
+        )
 
     async def _chat(self, *, system: str, user: str, schema: dict[str, Any]) -> dict:
         import httpx
@@ -105,13 +121,17 @@ class GeminiLLMClient(OllamaLLMClient):
             "Reply with a single JSON object that conforms to this schema:\n"
             f"```json\n{json.dumps(schema, indent=2)}\n```"
         )
+        gen_config: dict[str, Any] = {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+        }
+        if self._thinking_budget is not None:
+            gen_config["thinkingConfig"] = {"thinkingBudget": self._thinking_budget}
+
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "responseMimeType": "application/json",
-            },
+            "generationConfig": gen_config,
         }
         url = f"{API_ROOT}/models/{self._model}:generateContent"
         headers = {"x-goog-api-key": self._api_key}  # header, so it never lands in URLs/logs
