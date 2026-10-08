@@ -45,13 +45,32 @@ export type ManeuverDemo = {
   demoType?: 'evasion' | 'strike' | 'interdiction';
 };
 
-function pushBounded<T>(buffer: T[], item: T): T[] {
+function pushBounded<T extends { id: string }>(buffer: T[], item: T): T[] {
+  const existingIdx = buffer.findIndex((existing) => existing.id === item.id);
+  if (existingIdx !== -1) {
+    const next = [...buffer];
+    next[existingIdx] = item;
+    return next;
+  }
   const next = [item, ...buffer];
   if (next.length > RING_BUFFER) next.length = RING_BUFFER;
   return next;
 }
 
-function appendBounded<T>(buffer: T[], item: T, cap: number): T[] {
+function appendBounded<T extends { id?: string; ts?: string; message?: string }>(
+  buffer: T[],
+  item: T,
+  cap: number,
+): T[] {
+  const key = item.id || `${item.ts || ''}-${item.message || ''}`;
+  if (
+    buffer.some((existing) => {
+      const existingKey = existing.id || `${existing.ts || ''}-${existing.message || ''}`;
+      return existingKey === key;
+    })
+  ) {
+    return buffer;
+  }
   const next = [...buffer, item];
   if (next.length > cap) next.splice(0, next.length - cap);
   return next;
