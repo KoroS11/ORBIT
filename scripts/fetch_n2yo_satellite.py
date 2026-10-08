@@ -41,7 +41,7 @@ def timestamp_to_utc(timestamp: int) -> str:
 
 
 def fetch_text(url: str, timeout_s: float) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": "HALO N2YO GUI cache/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "ORBIT N2YO GUI cache/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
             return response.read().decode("utf-8")
