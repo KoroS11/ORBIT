@@ -11,9 +11,9 @@ Virtually every ground operation runs on data piped down from orbit; think ISR, 
 
 ORBIT is a tactical multi-domain awareness and decision-support system for the brigade-level analyst, operator, and commander. It fuses orbital, RF/EW, cyber, PNT, SATCOM, drone, HUMINT, and OSINT signals into a single live picture, attributes the threat, recommends an authorized response, and visualizes the outcome — all on hardware that fits in a forward operating base.
 
-- Runs at the **edge** on a single NVIDIA RTX 3090.
+- Runs at the **edge** on a single NVIDIA RTX 3090 (or any GPU with ~24 GB VRAM).
 - **Sense to decide in under 20 seconds.**
-- 100% local LLM inference via Ollama — no cloud, no PII egress. Designed to be hosted entirely on-prem.
+- local-first, with pluggable LLM backends: stub (default), Ollama (local), Anthropic, Gemini.
 
 
 ---
@@ -57,9 +57,9 @@ Every record — real, live, fixture, or synthetic — flows through the same ca
 
 ### Prerequisites
 
-- Python ≥ 3.11 with [`uv`](https://github.com/astral-sh/uv). 
+- Python ≥ 3.12 with [`uv`](https://github.com/astral-sh/uv). 
 - Node ≥ 20.
-- [Ollama](https://ollama.com) running locally with **Gemma 4 E2B** pulled.
+- [Ollama](https://ollama.com) running locally with **Gemma 4 E2B** pulled (if using the local Ollama backend).
 - One NVIDIA RTX 3050 (or any GPU with ~12 GB VRAM) for inference.
 
 ### Environment setup
@@ -69,14 +69,14 @@ source .venv/bin/activate
 uv sync
 ```
 
-### Start the local LLM
+### LLM Backends
 
-```bash
-ollama pull gemma4:e2b
-ollama serve
-```
+ORBIT supports pluggable LLM backends configured via `ORBIT_LLM`:
 
-ORBIT reads `ORBIT_OLLAMA_URL` (default `http://localhost:11434`) and `ORBIT_OLLAMA_MODEL` (set this to `gemma4:e2b`).
+- **Stub (default)**: `ORBIT_LLM=stub` — offline deterministic mocks for testing and development.
+- **Ollama (local)**: `ORBIT_LLM=ollama` — local inference (`ORBIT_OLLAMA_URL=http://localhost:11434`, `ORBIT_OLLAMA_MODEL=gemma4:26b`, `ORBIT_OLLAMA_TIMEOUT_S=180`).
+- **Anthropic**: `ORBIT_LLM=anthropic` (`ANTHROPIC_API_KEY`, `ORBIT_ANTHROPIC_MODEL=claude-sonnet-4-6`).
+- **Gemini**: `ORBIT_LLM=gemini` (`GEMINI_API_KEY`, `ORBIT_GEMINI_MODEL=gemini-2.5-flash`, `ORBIT_GEMINI_TIMEOUT_S=60`, `ORBIT_LLM_FALLBACK=1`).
 
 ### Backend gateway
 In one terminal, run the following to start the backend:
@@ -85,7 +85,12 @@ uv run uvicorn orbit.api:app --host 0.0.0.0 --port 8000
 ```
 
 The gateway boots the in-process bus, the three services, and exposes:
-- `GET /kb`, `GET /scenarios`, `POST /scenarios/{id}/start`, `POST /stress`
+- `GET /health` — liveness check
+- `GET /scenarios` — list available scenarios
+- `POST /scenarios/{name}/replay` — replay a scenario beat
+- `POST /signals` — ingest a domain signal
+- `GET /kb` — list loaded knowledge base entries
+- `POST /stress` — simulate domain degradation
 - `WS /ws` — Signal / Anomaly / Attribution / Decision / UIEvent / ReasoningTrace fanout
 
 ### Frontend
@@ -162,18 +167,4 @@ kb/                    # capability + routing knowledge base
 ORBIT ships with its own evaluation harness ([`bench/`](bench/)), which contains 11 hand-labelled seed scenarios plus ~40 procedural variants, each with ground-truth `expected_actor` / `expected_action` / `expected_authority` / `expected_band` labels. `bench/run.py` boots the engine in-process, replays every scenario, and produces a scorecard covering attribution accuracy, action match, authority routing, calibration (correct ↔ confidence band), and p50/p95 latency. 
 
 We're aware that small open-weight models leave headroom on multi-domain attribution compared to large cloud-hosted LLMs. We're interested in pursuing further research in this direction and are happy to move forward with the right collaborators on this.
-<<<<<<< HEAD
-=======
 
-## Partnering with frontier labs
-
-ORBIT is built around the assumption that the model lives at the edge but the *quality* of attribution and decision routing tracks directly with the underlying model. **We're actively seeking partnerships with frontier labs** to push two things:
-
-1. **Edge-first model distillation** — a Gemma-class (or smaller) model fine-tuned on the multi-domain reasoning, tool-use, and red-team-vs-reconciler patterns ORBIT exercises. Today we use the off-the-shelf weights; we'd like to close the gap to frontier-class reasoning at sub-20 GB VRAM.
-2. **Defensible evaluation** — extending the benchmark with adversarial scenarios, calibration probes, and authority-routing edge cases that frontier labs care about for safety and reliability research, with results we can publish jointly.
-
-If you're at a frontier lab and you find this interesting, we'd love to hear from you! In this project, we'll publish an initial (truncated) version of the benchmark; future updates to the benchmark will move to a dedicated repo (to be linked here in the future).
-
-## Contact
-For any questions regarding this project, please contact Brian via [bwu.ai](https://bwu.ai).
->>>>>>> 1ec0156 (refactor: rename CANOPY to ORBIT throughout codebase)
