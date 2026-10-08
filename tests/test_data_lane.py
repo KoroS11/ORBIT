@@ -88,10 +88,11 @@ class DataLaneBehaviorTest(unittest.TestCase):
             for example_path in sorted(EXAMPLES_DIR.glob("*.json"))
         ]
 
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".jsonl") as feed:
+        feed = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".jsonl", delete=False)
+        try:
             for signal in example_signals:
                 feed.write(json.dumps(signal) + "\n")
-            feed.flush()
+            feed.close()
 
             for domain, adapter in adapters.items():
                 with self.subTest(domain=domain):
@@ -101,6 +102,8 @@ class DataLaneBehaviorTest(unittest.TestCase):
                     self.assertEqual(expected_signals, adapter_signals)
                     self.assertEqual(1, len(adapter_signals))
                     self.assertEqual({domain}, {signal["domain"] for signal in adapter_signals})
+        finally:
+            Path(feed.name).unlink(missing_ok=True)
 
     def test_schema_examples_validate_against_signal_and_payload_schemas(self) -> None:
         signal_schema = json.loads(SIGNAL_SCHEMA.read_text(encoding="utf-8"))

@@ -1,7 +1,6 @@
-"""Smoke tests for the FastAPI gateway."""
-from __future__ import annotations
-
+import os
 import time
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,8 +10,9 @@ from orbit.api import app
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as test_client:
-        yield test_client
+    with mock.patch.dict(os.environ, {"ORBIT_LLM": "stub", "ORBIT_LIVE": ""}):
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 def test_health(client: TestClient) -> None:
