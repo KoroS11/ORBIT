@@ -137,7 +137,7 @@ async def main(
 
 
 def cli() -> None:
-    # Load .env if present so ANTHROPIC_API_KEY / ORBIT_LIVE / ORBIT_ANTHROPIC_MODEL
+    # Load .env if present so ANTHROPIC_API_KEY / GEMINI_API_KEY / ORBIT_LIVE / ORBIT_ANTHROPIC_MODEL
     # are available before we parse args or build clients. .env values do not
     # override variables that are already set in the environment.
     load_dotenv()
@@ -151,7 +151,8 @@ def cli() -> None:
         default=None,
         help=(
             "LLM provider: 'stub' (default, no network), 'anthropic' (requires "
-            "ANTHROPIC_API_KEY), or 'ollama' (requires ORBIT_OLLAMA_URL). "
+            "ANTHROPIC_API_KEY), 'gemini' (requires GEMINI_API_KEY), or "
+            "'ollama' (requires ORBIT_OLLAMA_URL). "
             "Falls back to ORBIT_LLM env var, then to --live/ORBIT_LIVE, "
             "then to stub."
         ),

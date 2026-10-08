@@ -25,7 +25,7 @@ from orbit.services.traces import Tracer
 from orbit.services.ui_events import UIEventService
 
 DEFAULT_KB_PATH = Path("data/kb_seed_entries.json")
-LLM_PROVIDERS = ("stub", "anthropic", "ollama")
+LLM_PROVIDERS = ("stub", "anthropic", "ollama", "gemini")
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,17 @@ def build_llm(*, provider: str, kb: KB) -> LLMClient:
         from orbit.services.llm.ollama_client import OllamaLLMClient
 
         return OllamaLLMClient(kb)
+    if provider == "gemini":
+        from orbit.services.llm.gemini_client import (
+            FallbackLLMClient,
+            GeminiLLMClient,
+        )
+        from orbit.services.llm.stub import StubLLMClient
+
+        primary = GeminiLLMClient(kb)
+        if os.environ.get("ORBIT_LLM_FALLBACK", "1") == "0":
+            return primary
+        return FallbackLLMClient(primary, StubLLMClient(kb))
     from orbit.services.llm.stub import StubLLMClient
 
     return StubLLMClient(kb)

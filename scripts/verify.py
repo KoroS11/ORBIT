@@ -54,7 +54,7 @@ RECOMMENDATION_SCENARIOS = {
 }
 
 
-LLM_PROVIDERS = ("stub", "anthropic", "ollama")
+LLM_PROVIDERS = ("stub", "anthropic", "ollama", "gemini")
 
 
 def _build_llm(*, provider: str, kb: KB) -> LLMClient:
@@ -70,6 +70,17 @@ def _build_llm(*, provider: str, kb: KB) -> LLMClient:
         from orbit.services.llm.ollama_client import OllamaLLMClient
 
         return OllamaLLMClient(kb)
+    if provider == "gemini":
+        from orbit.services.llm.gemini_client import (
+            FallbackLLMClient,
+            GeminiLLMClient,
+        )
+        from orbit.services.llm.stub import StubLLMClient
+
+        primary = GeminiLLMClient(kb)
+        if os.environ.get("ORBIT_LLM_FALLBACK", "1") == "0":
+            return primary
+        return FallbackLLMClient(primary, StubLLMClient(kb))
     from orbit.services.llm.stub import StubLLMClient
 
     return StubLLMClient(kb)
@@ -246,9 +257,10 @@ def main() -> int:
         default=None,
         help=(
             "LLM provider: 'stub' (default, no network), 'anthropic' "
-            "(requires ANTHROPIC_API_KEY), or 'ollama' (requires "
-            "ORBIT_OLLAMA_URL). Falls back to ORBIT_LLM env var, "
-            "then to --live/ORBIT_LIVE, then to stub."
+            "(requires ANTHROPIC_API_KEY), 'ollama' (requires "
+            "ORBIT_OLLAMA_URL), or 'gemini' (requires GEMINI_API_KEY). "
+            "Falls back to ORBIT_LLM env var, then to --live/ORBIT_LIVE, "
+            "then to stub."
         ),
     )
     parser.add_argument(
