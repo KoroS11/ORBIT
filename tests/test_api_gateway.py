@@ -92,3 +92,9 @@ def test_post_signal_publishes_to_bus(client: TestClient) -> None:
     body = response.json()
     assert body["status"] == "queued"
     assert body["id"] == "test-sig-001"
+
+
+def test_post_reset_endpoint(client: TestClient) -> None:
+    response = client.post("/reset")
+    assert response.status_code == 200
+    assert response.json() == {"status": "reset"}

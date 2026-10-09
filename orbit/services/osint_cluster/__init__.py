@@ -98,6 +98,13 @@ class OsintClusterService:
         self._projection_dirty: bool = True
         self._coords: np.ndarray = np.zeros((0, 2), dtype=np.float32)
 
+    def reset(self) -> None:
+        self._window.clear()
+        self._next_cluster_id = 0
+        self._announced_clusters.clear()
+        self._projection_dirty = True
+        self._coords = np.zeros((0, 2), dtype=np.float32)
+
     async def warmup(self) -> None:
         """Non-blocking background warm-up of the sentence-transformer encoder."""
         try:

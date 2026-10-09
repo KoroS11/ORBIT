@@ -204,6 +204,7 @@ export async function triggerReplay(
   name: string,
   speed = 5,
 ): Promise<void> {
+  useEventStore.getState().reset();
   await fetch(
     `${API_URL}/scenarios/${encodeURIComponent(name)}/replay?speed=${speed}`,
     { method: "POST" },

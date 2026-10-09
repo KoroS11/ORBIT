@@ -43,6 +43,11 @@ class Engine:
     ui_events: UIEventService
     osint_cluster: OsintClusterService
 
+    def reset(self) -> None:
+        self.fusion.reset()
+        self.osint_cluster.reset()
+        self.attrib.reset()
+
 
 def build_llm(*, provider: str, kb: KB) -> LLMClient:
     if provider == "anthropic":

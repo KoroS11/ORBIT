@@ -43,6 +43,7 @@ _FANOUT_PATTERNS: tuple[tuple[str, str], ...] = (
     ("ui_events.*", "ui_event"),
     ("traces.*", "trace"),
     ("embeddings.*", "embedding"),
+    ("system.*", "reset"),
 )
 
 
@@ -173,6 +174,17 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="fixture missing")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.post("/reset")
+    async def reset_engine() -> dict[str, Any]:
+        prev = app.state.replay_task
+        if prev is not None and not prev.done():
+            prev.cancel()
+            app.state.replay_task = None
+        if hasattr(app.state, "engine"):
+            app.state.engine.reset()
+            await app.state.engine.bus.publish("system.reset", {"type": "reset"})
+        return {"status": "reset"}
+
     @app.post("/scenarios/{name}/replay")
     async def replay_scenario(name: str, speed: float = 5.0) -> dict[str, Any]:
         path = SCENARIOS_DIR / name
@@ -182,6 +194,11 @@ def create_app() -> FastAPI:
         prev = app.state.replay_task
         if prev is not None and not prev.done():
             prev.cancel()
+            app.state.replay_task = None
+
+        if hasattr(app.state, "engine"):
+            app.state.engine.reset()
+            await app.state.engine.bus.publish("system.reset", {"type": "reset"})
 
         replay = ScenarioReplayService(
             app.state.engine.bus,

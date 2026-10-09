@@ -83,6 +83,7 @@ function normalizeMessage(value: unknown): OrbitMessage | null {
       'ui_event',
       'trace',
       'embedding',
+      'reset',
     ].includes(discriminator)
   ) {
     return null
@@ -97,6 +98,17 @@ function reduceMessage(
 ): OrbitSocketState {
   const store = useEventStore.getState()
   switch (message.type) {
+    case 'reset':
+      store.reset()
+      return {
+        ...state,
+        signals: [],
+        anomalies: [],
+        attributions: [],
+        decisions: [],
+        uiEvents: [],
+        traces: [],
+      }
     case 'signal':
       store.ingestSignal(message.data as Signal)
       return {

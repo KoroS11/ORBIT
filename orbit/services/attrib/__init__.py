@@ -85,17 +85,22 @@ class AttribService:
         self._tracer = tracer
         self._blocked_domains = blocked_domains
         self._multi_agent = multi_agent
+        self._buffer: list[Anomaly] = []
+        self._flush_task: asyncio.Task | None = None
+
+    def reset(self) -> None:
+        self._buffer.clear()
+        if self._flush_task is not None and not self._flush_task.done():
+            self._flush_task.cancel()
+            self._flush_task = None
 
     async def run(self) -> None:
-        buffer: list[Anomaly] = []
-        flush_task: asyncio.Task | None = None
-
         async def flush() -> None:
             await asyncio.sleep(self._window_s)
-            if not buffer:
+            if not self._buffer:
                 return
-            batch = list(buffer)
-            buffer.clear()
+            batch = list(self._buffer)
+            self._buffer.clear()
             await self._process(batch)
 
         try:
@@ -108,12 +113,12 @@ class AttribService:
                 if self._window_s <= 0:
                     await self._process([event])
                     continue
-                buffer.append(event)
-                if flush_task is None or flush_task.done():
-                    flush_task = asyncio.create_task(flush())
+                self._buffer.append(event)
+                if self._flush_task is None or self._flush_task.done():
+                    self._flush_task = asyncio.create_task(flush())
         finally:
-            if flush_task is not None and not flush_task.done():
-                flush_task.cancel()
+            if self._flush_task is not None and not self._flush_task.done():
+                self._flush_task.cancel()
 
     async def _process(self, anomalies: list[Anomaly]) -> None:
         # KB context: union of entries indexed by the source signal ids of

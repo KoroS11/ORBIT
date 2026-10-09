@@ -253,6 +253,9 @@ class FusionService:
         self._blocked_domains = blocked_domains
         self._state = _State()
 
+    def reset(self) -> None:
+        self._state = _State()
+
     async def run(self) -> None:
         async for topic, event in self._bus.subscribe("signals.*"):
             if not isinstance(event, Signal):

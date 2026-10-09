@@ -51,28 +51,9 @@ export function ReasoningPanel({ compact = false }: Props) {
   }, [traces.length])
 
   const clear = () => {
-    // Full session reset — wipes every engine event slice the demo
-    // accumulates (traces, anomalies, decisions, attributions, signals,
-    // ui_events, OSINT embedding snapshot, lookup tables, pending
-    // approval) but preserves KB (fetched once at mount) and live
-    // connection state. Persisted sessionStorage gets updated on the
-    // next setState since the persist middleware writes through.
-    useEventStore.setState({
-      signals: [],
-      anomalies: [],
-      attributions: [],
-      decisions: [],
-      uiEvents: [],
-      traces: [],
-      embeddingSnapshot: null,
-      signalsById: {},
-      attributionsById: {},
-      decisionsById: {},
-      pendingApproval: null,
-      takeoverEvent: null,
-      selectedEventId: null,
-      approvedEventIds: new Set(),
-    })
+    useEventStore.getState().reset()
+    const apiUrl = import.meta.env.VITE_ORBIT_API_URL ?? 'http://127.0.0.1:8000'
+    void fetch(`${apiUrl}/reset`, { method: 'POST' }).catch(() => {})
   }
 
   return (

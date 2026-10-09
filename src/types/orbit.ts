@@ -166,6 +166,7 @@ export type OrbitMessage =
   | { type: 'ui_event'; topic?: string; data: UIEvent }
   | { type: 'trace'; topic?: string; data: ReasoningTrace }
   | { type: 'embedding'; topic?: string; data: OsintEmbeddingSnapshot }
+  | { type: 'reset'; topic?: string; data?: Record<string, unknown> }
 
 export type OrbitSocketState = {
   signals: Signal[]
