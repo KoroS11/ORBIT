@@ -1847,13 +1847,16 @@ export function CesiumGlobe({
         ) : null}
         {maneuverDemo ? (
           <aside className="maneuver-overlay" aria-label="Maneuver execution status">
-            <span className="maneuver-overlay__eyebrow">
-              {maneuverDemo.demoType === 'strike'
-                ? 'Kinetic strike inbound'
-                : maneuverDemo.demoType === 'interdiction'
-                  ? 'Link interdiction active'
-                  : 'Plane-change burn executing'}
-            </span>
+            <div className="maneuver-overlay__head">
+              <span className="maneuver-overlay__eyebrow">
+                {maneuverDemo.demoType === 'strike'
+                  ? 'Kinetic strike inbound'
+                  : maneuverDemo.demoType === 'interdiction'
+                    ? 'Link interdiction active'
+                    : 'Plane-change burn executing'}
+              </span>
+              <span className="maneuver-overlay__tag">Illustrative Animation</span>
+            </div>
             <strong className="maneuver-overlay__title">
               {maneuverPair?.friendly ?? maneuverDemo.friendlyLabel ?? 'Friendly'}{' '}
               {maneuverDemo.demoType === 'strike'

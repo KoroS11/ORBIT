@@ -1628,6 +1628,13 @@
   }
 }
 
+.maneuver-overlay__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .maneuver-overlay__eyebrow {
   display: block;
   color: #4ade80;
@@ -1635,6 +1642,20 @@
   font-weight: 720;
   text-transform: uppercase;
   letter-spacing: 0.16em;
+}
+
+.maneuver-overlay__tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 247, 240, 0.22);
+  border-radius: 2px;
+  background: rgba(245, 247, 240, 0.08);
+  color: rgba(245, 247, 240, 0.72);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .maneuver-overlay__title {
