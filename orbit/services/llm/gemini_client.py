@@ -35,8 +35,8 @@ from orbit.services.schemas.events import (
 
 log = logging.getLogger(__name__)
 
-# Placeholder: confirm against the model list returned for your key.
-DEFAULT_MODEL = "gemini-2.5-flash"
+# Default model that provides fast responses without 429 quota exhaustion.
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 RETRY_STATUS = {429, 500, 503}
 MAX_ATTEMPTS = 4

@@ -13,7 +13,6 @@ import { defaultScenario, scenarios } from '../data/scenarioLibrary'
 import { useOrbitMissionState } from '../hooks/useOrbitMissionState'
 import { useOrbitSocket } from '../hooks/useOrbitSocket'
 import { triggerReplay } from '../hooks/useEngineSocket'
-import { DataProvenanceBadge } from '../components/DataProvenanceBadge'
 import { useEventStore } from '../store/eventStore'
 import type { PlaybackStatus } from '../types/playback'
 import type { Attribution, Decision, Signal } from '../types/orbit'
@@ -210,7 +209,6 @@ export function Brigade() {
           <h1>Brigade COP</h1>
         </div>
         <div className="app-header__right">
-          <DataProvenanceBadge />
           <span
             className={
               isEngineLive
@@ -335,7 +333,7 @@ export function Brigade() {
               signals={signals}
             />
           </CollapsibleStackSection>
-          <CollapsibleStackSection title="System actions" defaultOpen={false}>
+          <CollapsibleStackSection title="System actions" defaultOpen={true}>
             <ActionLog compact />
           </CollapsibleStackSection>
           <CollapsibleStackSection

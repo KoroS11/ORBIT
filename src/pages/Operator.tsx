@@ -3,7 +3,6 @@ import { ActionLog } from '../components/ActionLog'
 import { EmbeddingViz } from '../components/EmbeddingViz'
 import { ReasoningPanel } from '../components/ReasoningPanel'
 import { useOrbitSocket } from '../hooks/useOrbitSocket'
-import { DataProvenanceBadge } from '../components/DataProvenanceBadge'
 
 export function Operator() {
   // Open the same WebSocket Brigade uses so live engine output streams
@@ -26,7 +25,6 @@ export function Operator() {
           <h1>Fusion Console</h1>
         </div>
         <div className="app-header__right">
-          <DataProvenanceBadge />
           <a href="/brigade">Brigade View</a>
         </div>
       </header>

@@ -136,16 +136,53 @@ class DecideService:
     async def _maybe_enrich_with_tools(
         self, decision: Decision, attribution: Attribution
     ) -> Decision:
-        if self._orbit is None or self._tool_ctx is None or self._tool_ctx.orbit is None:
+        if self._tool_ctx is None or self._tools is None:
             return decision
         if decision.authority != "request":
             return decision
-        if decision.action not in _ORBIT_ENRICHED_ACTIONS:
-            return decision
         rpo = self._find_rpo_anomaly(attribution)
-        if rpo is None:
-            return decision
-        return await self._apply_maneuver_via_tools(decision, attribution, rpo)
+        if rpo is not None and self._orbit is not None and self._tool_ctx.orbit is not None:
+            return await self._apply_maneuver_via_tools(decision, attribution, rpo)
+        return await self._apply_generic_request_tools(decision, attribution)
+
+    async def _apply_generic_request_tools(
+        self, decision: Decision, attribution: Attribution
+    ) -> Decision:
+        assert self._tool_ctx is not None and self._tools is not None
+        tool_by_name = {tool.name: tool for tool in self._tools}
+        kb_tool = tool_by_name.get("kb.lookup")
+        if kb_tool is not None:
+            await dispatch(
+                kb_tool,
+                {"actor": attribution.actor},
+                self._tool_ctx,
+                ref_id=decision.id,
+            )
+        draft_tool = tool_by_name.get("request.draft")
+        request_packet: dict[str, Any] = dict(decision.request_packet or {})
+        if draft_tool is not None:
+            draft_result = await dispatch(
+                draft_tool,
+                {
+                    "actor": attribution.actor,
+                    "confidence": attribution.confidence,
+                    "justification": list(attribution.evidence),
+                    "kb_citations": list(attribution.kb_citations),
+                },
+                self._tool_ctx,
+                ref_id=decision.id,
+            )
+            drafted = draft_result.get("request_packet") or {}
+            request_packet.update(drafted)
+        routing_tool = tool_by_name.get("routing.validate")
+        if routing_tool is not None:
+            await dispatch(
+                routing_tool,
+                {"action": decision.action, "authority": decision.authority},
+                self._tool_ctx,
+                ref_id=decision.id,
+            )
+        return decision.model_copy(update={"request_packet": request_packet})
 
     def _find_rpo_anomaly(self, attribution: Attribution) -> Anomaly | None:
         for aid in attribution.anomaly_ids:

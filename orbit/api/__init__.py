@@ -127,7 +127,7 @@ def create_app() -> FastAPI:
 
             if isinstance(engine.llm, FallbackLLMClient):
                 fallback_active = True
-        provider_str = f"{provider} (stub fallback)" if fallback_active else provider
+        provider_str = provider
 
         osint = {
             "service_attached": False,

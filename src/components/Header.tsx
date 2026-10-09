@@ -2,7 +2,6 @@ import { useEventStore } from "../store/eventStore";
 import type { ViewMode } from "../types/orbit";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { SeverityRibbon } from "./SeverityRibbon";
-import { DataProvenanceBadge } from "./DataProvenanceBadge";
 
 const VIEWS: { value: ViewMode; label: string }[] = [
   { value: "brigade", label: "Brigade" },
@@ -39,7 +38,6 @@ export function Header() {
           </button>
         ))}
       </div>
-      <DataProvenanceBadge />
       <ConnectionStatus />
     </header>
   );
