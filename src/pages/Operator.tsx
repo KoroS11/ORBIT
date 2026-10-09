@@ -15,6 +15,7 @@ export function Operator() {
   const signals = useEventStore((s) => s.signals)
   const anomalies = useEventStore((s) => s.anomalies)
   const decisions = useEventStore((s) => s.decisions)
+  const needApproval = decisions.filter((d) => d.authority === 'request').length
 
   return (
     <main className="operator-shell">
@@ -49,7 +50,10 @@ export function Operator() {
         <div className="panel operator-panel--decision">
           <div className="panel__header">
             <h2>Decision Rail</h2>
-            <span>{String(decisions.length).padStart(2, '0')} pending</span>
+            <span>
+              {decisions.length} {decisions.length === 1 ? 'decision' : 'decisions'},{' '}
+              {needApproval} {needApproval === 1 ? 'needs' : 'need'} approval
+            </span>
           </div>
           {decisions.length === 0 ? (
             <p className="operator-shell__empty">No authority requests</p>
