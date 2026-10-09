@@ -396,6 +396,21 @@ export function CesiumGlobe({
     hostile: string
   } | null>(null)
 
+  const closeSelectedSatellite = useCallback(() => {
+    const viewer = viewerRef.current
+    if (viewer && !viewer.isDestroyed() && selectedN2yoLayerRef.current) {
+      deselectN2YOSatellite(viewer, selectedN2yoLayerRef.current)
+      setN2YOOrbitsVisible(viewer, n2yoLayersRef.current, false)
+      showAllOrbitsRef.current = false
+      setShowAllOrbits(false)
+      selectedN2yoLayerRef.current = null
+      setSelectedSatellite(null)
+      viewer.scene.requestRender()
+    } else {
+      setSelectedSatellite(null)
+    }
+  }, [])
+
   useEffect(() => {
     showAllOrbitsRef.current = showAllOrbits
   }, [showAllOrbits])
@@ -1803,7 +1818,18 @@ export function CesiumGlobe({
       <div className="cesium-globe-cards" aria-label="Globe active cards">
         {selectedSatellite ? (
           <aside className="satellite-detail" aria-label="Selected satellite">
-            <span>Selected Satellite</span>
+            <div className="satellite-detail__header">
+              <span>Selected Satellite</span>
+              <button
+                aria-label="Close selected satellite pane"
+                className="satellite-detail__close"
+                onClick={closeSelectedSatellite}
+                title="Close satellite details"
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
             <strong>{selectedSatellite.satelliteName}</strong>
             <dl>
               <div>

@@ -1557,6 +1557,37 @@
   backdrop-filter: blur(10px) saturate(1.08);
 }
 
+.satellite-detail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.satellite-detail__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(220, 227, 213, 0.2);
+  border-radius: 2px;
+  background: rgba(6, 12, 12, 0.65);
+  color: rgba(220, 227, 213, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.satellite-detail__close:hover {
+  background: rgba(224, 92, 79, 0.2);
+  border-color: rgba(224, 92, 79, 0.55);
+  color: #ff9d92;
+}
+
 .satellite-detail span,
 .satellite-detail dt {
   color: rgba(220, 227, 213, 0.74);
