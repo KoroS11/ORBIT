@@ -169,8 +169,16 @@ export function Brigade() {
     }
   }
 
-  const signals = activeScenarioSignals
   const isEngineLive = socketState.isConnected
+
+  // Auto-replay active scenario through the backend engine on initial connection
+  useEffect(() => {
+    if (isEngineLive && activeScenario?.file) {
+      void triggerReplay(activeScenario.file, 5).catch(() => {})
+    }
+  }, [isEngineLive, activeScenario?.file])
+
+  const signals = activeScenarioSignals
   const dataModeLabel = isEngineLive ? 'Engine live' : 'Feed'
   const latestAttribution =
     socketState.attributions[0] ?? (beatIndex >= 4 ? beatAttribution : null)
