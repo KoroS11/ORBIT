@@ -20,6 +20,9 @@ def test_health(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
+    assert "provider" in body
+    assert body["provider"] in ("stub", "gemini", "anthropic", "ollama") or "stub fallback" in body["provider"]
+    assert "stub_fallback_active" in body
     assert body["kb_entries"] >= 5
 
 

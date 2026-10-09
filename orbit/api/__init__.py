@@ -54,6 +54,7 @@ async def _lifespan(app: FastAPI):
     log.info("ORBIT API starting (llm=%s)", provider)
 
     app.state.blocked_domains: set[str] = set()
+    app.state.provider = provider
     engine = build_engine(
         provider=provider,
         blocked_domains_provider=lambda: app.state.blocked_domains,
@@ -119,6 +120,15 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, Any]:
         engine = getattr(app.state, "engine", None)
+        provider = getattr(app.state, "provider", "stub")
+        fallback_active = False
+        if engine and hasattr(engine, "llm"):
+            from orbit.services.llm.gemini_client import FallbackLLMClient
+
+            if isinstance(engine.llm, FallbackLLMClient):
+                fallback_active = True
+        provider_str = f"{provider} (stub fallback)" if fallback_active else provider
+
         osint = {
             "service_attached": False,
             "model_loaded": False,
@@ -139,6 +149,8 @@ def create_app() -> FastAPI:
             osint["similarity_threshold"] = cluster._similarity_threshold
         return {
             "status": "ok",
+            "provider": provider_str,
+            "stub_fallback_active": fallback_active,
             "llm": engine.llm.__class__.__name__ if engine else None,
             "kb_entries": len(engine.kb) if engine else 0,
             "clients": len(getattr(app.state, "clients", ())),

@@ -127,6 +127,51 @@
   color: var(--status-live-bright);
 }
 
+.data-provenance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(201, 164, 87, 0.45);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(201, 164, 87, 0.08), rgba(201, 164, 87, 0.02)),
+    var(--control-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--text-primary);
+  cursor: help;
+  user-select: none;
+}
+
+.data-provenance-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+  flex-shrink: 0;
+}
+
+.data-provenance-badge__provider {
+  font-weight: 700;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-provenance-badge__divider {
+  color: rgba(220, 227, 213, 0.3);
+}
+
+.data-provenance-badge__synthetic {
+  color: var(--amber);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+
 .command-workbench {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 340px;
