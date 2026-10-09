@@ -79,13 +79,15 @@ def build_llm(*, provider: str, kb: KB) -> LLMClient:
 
 
 def resolve_provider(*, llm_flag: str | None, live_flag: bool = False) -> str:
-    """Pick provider from --llm > ORBIT_LLM env > --live/ORBIT_LIVE > stub."""
+    """Pick provider from --llm > ORBIT_LLM env > GEMINI_API_KEY > --live/ORBIT_LIVE > stub."""
     if llm_flag:
         return llm_flag
     env_value = os.environ.get("ORBIT_LLM")
     if env_value:
         return env_value.lower()
-    if live_flag or os.environ.get("ORBIT_LIVE"):
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "gemini"
+    if os.environ.get("ANTHROPIC_API_KEY") or live_flag or os.environ.get("ORBIT_LIVE"):
         return "anthropic"
     return "stub"
 
