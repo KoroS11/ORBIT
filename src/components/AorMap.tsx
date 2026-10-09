@@ -876,6 +876,9 @@ export function AorMap({
       return
     }
 
+    const imageryTileUrl =
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+
     const map = new maplibregl.Map({
       attributionControl: false,
       center: centerFromBounds(aorBounds),
@@ -888,9 +891,7 @@ export function AorMap({
         sources: {
           esriWorldImagery: {
             type: 'raster',
-            tiles: [
-              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            ],
+            tiles: [imageryTileUrl],
             tileSize: 256,
             maxzoom: 19,
             attribution:
@@ -898,6 +899,13 @@ export function AorMap({
           },
         },
         layers: [
+          {
+            id: 'background',
+            type: 'background',
+            paint: {
+              'background-color': '#0c1417',
+            },
+          },
           {
             id: 'imagery',
             type: 'raster',
@@ -930,6 +938,11 @@ export function AorMap({
       zoom: INITIAL_AOR_ZOOM,
     })
 
+    const resizeObserver = new ResizeObserver(() => {
+      map.resize()
+    })
+    resizeObserver.observe(containerRef.current)
+
     mapRef.current = map
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     map.addControl(
@@ -939,6 +952,7 @@ export function AorMap({
 
     map.on('load', () => {
       setIsMapReady(true)
+      map.resize()
       map.fitBounds(initialAorViewBounds, {
         duration: 0,
         padding: { bottom: 72, left: 48, right: 48, top: 42 },
@@ -1214,6 +1228,7 @@ export function AorMap({
     })
 
     return () => {
+      resizeObserver.disconnect()
       map.remove()
       mapRef.current = null
       setIsMapReady(false)
