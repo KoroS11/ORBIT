@@ -152,4 +152,5 @@ def start_engine_tasks(engine: Engine) -> list[asyncio.Task]:
         asyncio.create_task(engine.decide.run(), name="decide"),
         asyncio.create_task(engine.ui_events.run(), name="ui_events"),
         asyncio.create_task(engine.osint_cluster.run(), name="osint_cluster"),
+        asyncio.create_task(engine.osint_cluster.warmup(), name="osint_warmup"),
     ]

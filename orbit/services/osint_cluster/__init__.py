@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -84,6 +85,7 @@ class OsintClusterService:
         self._window_size = window_size
         self._encoder_factory = encoder_factory
         # Mutable state.
+        self._load_lock = threading.Lock()
         self._encoder: Any | None = None
         self._encoder_dim: int = 0
         self._window: list[_WindowEntry] = []
@@ -95,6 +97,13 @@ class OsintClusterService:
         # window mutates, and _publish_snapshot rebuilds _coords only then.
         self._projection_dirty: bool = True
         self._coords: np.ndarray = np.zeros((0, 2), dtype=np.float32)
+
+    async def warmup(self) -> None:
+        """Non-blocking background warm-up of the sentence-transformer encoder."""
+        try:
+            await asyncio.to_thread(self._ensure_encoder)
+        except Exception:
+            log.exception("osint_cluster: background warm-up failed")
 
     async def run(self) -> None:
         async for topic, event in self._bus.subscribe("signals.osint"):
@@ -114,28 +123,31 @@ class OsintClusterService:
         than crashing the engine."""
         if self._encoder is not None:
             return self._encoder
-        if self._encoder_factory is not None:
-            self._encoder = self._encoder_factory(self._model_name)
-        else:
-            try:
-                from sentence_transformers import SentenceTransformer
-            except ImportError:
-                log.warning(
-                    "osint_cluster: sentence-transformers not installed; "
-                    "OSINT clustering disabled"
-                )
-                return None
-            log.info("osint_cluster: loading model %s", self._model_name)
-            self._encoder = SentenceTransformer(self._model_name)
-        # Probe dimension so the snapshot can carry it.
-        sample = self._encoder.encode("probe", normalize_embeddings=True)
-        self._encoder_dim = int(sample.shape[-1])
-        log.info(
-            "osint_cluster: encoder ready (dim=%d, model=%s)",
-            self._encoder_dim,
-            self._model_name,
-        )
-        return self._encoder
+        with self._load_lock:
+            if self._encoder is not None:
+                return self._encoder
+            if self._encoder_factory is not None:
+                self._encoder = self._encoder_factory(self._model_name)
+            else:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                except ImportError:
+                    log.warning(
+                        "osint_cluster: sentence-transformers not installed; "
+                        "OSINT clustering disabled"
+                    )
+                    return None
+                log.info("osint_cluster: loading model %s", self._model_name)
+                self._encoder = SentenceTransformer(self._model_name)
+            # Probe dimension so the snapshot can carry it.
+            sample = self._encoder.encode("probe", normalize_embeddings=True)
+            self._encoder_dim = int(sample.shape[-1])
+            log.info(
+                "osint_cluster: encoder ready (dim=%d, model=%s)",
+                self._encoder_dim,
+                self._model_name,
+            )
+            return self._encoder
 
     # ---- Per-signal handling ---------------------------------------------
 
