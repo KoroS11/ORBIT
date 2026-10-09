@@ -9,6 +9,7 @@ import pytest
 from orbit.services.bus import InProcessBus
 from orbit.services.decide.tools import (
     KBLookupTool,
+    OrbitCloseApproachTool,
     OrbitSimulateManeuverTool,
     RequestDraftTool,
     RoutingValidateTool,
@@ -57,6 +58,38 @@ async def test_kb_lookup_returns_entries_for_known_actor():
     result = await tool.execute({"actor": "China"}, ctx)
     assert result["count"] >= 0
     assert isinstance(result["entries"], list)
+
+
+
+@pytest.mark.asyncio
+async def test_orbit_compute_close_approach_uses_sgp4_when_both_known():
+    tool = OrbitCloseApproachTool()
+    ctx = _ctx()
+    sats = ctx.orbit.known_satellites()
+    result = await tool.execute({"sat_a": sats[0], "sat_b": sats[1]}, ctx)
+    assert result["source"] == "SGP4"
+    assert "closest_approach_km" in result
+    assert result["closest_approach_km"] > 0
+    assert "t_closest" in result
+
+
+@pytest.mark.asyncio
+async def test_orbit_compute_close_approach_uses_scenario_authored_when_missing():
+    tool = OrbitCloseApproachTool()
+    ctx = _ctx()
+    result = await tool.execute(
+        {
+            "sat_a": "UNKNOWN-RSO-441",
+            "sat_b": "ORBIT-LEO-07",
+            "authored_miss_km": 18.5,
+            "authored_tca_iso": "2026-06-18T15:55:30Z",
+        },
+        ctx,
+    )
+    assert result["source"] == "scenario-authored (no TLE for UNKNOWN-RSO-441, ORBIT-LEO-07)"
+    assert result["closest_approach_km"] == 18.5
+    assert result["t_closest"] == "2026-06-18T15:55:30Z"
+    assert result["clock"] == "scenario"
 
 
 @pytest.mark.asyncio

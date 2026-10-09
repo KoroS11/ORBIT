@@ -209,28 +209,20 @@ class DecideService:
 
         # 2) orbit.compute_close_approach — independently verify the
         # close-approach geometry using Skyfield SGP4 against cached
-        # TLEs. The demo scenarios use synthetic satellite names that
-        # aren't in the catalog; when that's the case fall back to a
-        # documented adversary inspector (SJ-21, the Chinese inspector
-        # that physically grappled BeiDou-2 G2 in 2022) so the operator
-        # still sees the tool fire with real ephemeris numbers. Either
-        # way the trace shows real math, not a template.
+        # TLEs when available, or scenario-authored observables when
+        # satellites lack public TLEs. Never substitutes unrelated satellites.
         ca_tool = tool_by_name.get("orbit.compute_close_approach")
         if ca_tool is not None and self._tool_ctx.orbit is not None:
-            known = set(self._tool_ctx.orbit.known_satellites())
-            if friendly in known and inspector in known:
-                ca_args = {"sat_a": friendly, "sat_b": inspector}
-            elif len(known) >= 2:
-                # Pick a documented adversary pair from the catalog so
-                # the displayed math is grounded in real public TLEs.
-                ordered = sorted(known)
-                ca_args = {"sat_a": ordered[0], "sat_b": ordered[1]}
-            else:
-                ca_args = None
-            if ca_args is not None:
-                await dispatch(
-                    ca_tool, ca_args, self._tool_ctx, ref_id=decision.id
-                )
+            ca_args = {
+                "sat_a": friendly,
+                "sat_b": inspector,
+                "authored_miss_km": pre_miss_km,
+                "authored_tca_iso": _format_utc(t_tca) if t_tca else None,
+                "t0_iso": _format_utc(rpo.ts) if rpo.ts else None,
+            }
+            await dispatch(
+                ca_tool, ca_args, self._tool_ctx, ref_id=decision.id
+            )
 
         # 3) orbit.simulate_maneuver — the actual maneuver math.
         sim_tool = tool_by_name.get("orbit.simulate_maneuver")

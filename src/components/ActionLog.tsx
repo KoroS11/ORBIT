@@ -53,8 +53,15 @@ function summariseResult(trace: ReasoningTrace): string {
     case 'orbit.compute_close_approach': {
       const km = result.closest_approach_km
       const t = result.t_closest as string | undefined
-      const time = t ? new Date(t).toLocaleTimeString('en-US', { hour12: false }) : '—'
-      return km !== undefined ? `${km} km @ ${time}` : 'computed'
+      const source = result.source as string | undefined
+      const time = t
+        ? new Date(t).toLocaleTimeString('en-US', {
+            hour12: false,
+            timeZone: 'UTC',
+          }) + ' UTC'
+        : '—'
+      const label = source ? ` [${source}]` : ''
+      return km !== undefined ? `${km} km @ ${time}${label}` : 'computed'
     }
     case 'orbit.simulate_maneuver': {
       const pre = result.pre_miss_km

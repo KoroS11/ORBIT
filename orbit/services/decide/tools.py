@@ -118,6 +118,8 @@ class OrbitCloseApproachTool:
                 "sat_b": {"type": "string"},
                 "window_minutes": {"type": "number", "default": 360.0},
                 "t0_iso": {"type": "string"},
+                "authored_miss_km": {"type": "number"},
+                "authored_tca_iso": {"type": "string"},
             },
         }
 
@@ -126,19 +128,38 @@ class OrbitCloseApproachTool:
             return {"error": "orbit service unavailable"}
         sat_a = args["sat_a"]
         sat_b = args["sat_b"]
-        if sat_a not in ctx.orbit.known_satellites():
-            return {"error": f"unknown satellite: {sat_a}"}
-        if sat_b not in ctx.orbit.known_satellites():
-            return {"error": f"unknown satellite: {sat_b}"}
+        known = set(ctx.orbit.known_satellites())
+        missing = [s for s in (sat_a, sat_b) if s not in known]
 
-        window = timedelta(minutes=float(args.get("window_minutes", 360.0)))
-        t0 = _parse_iso(args.get("t0_iso"))
-        result = ctx.orbit.close_approach(sat_a, sat_b, window=window, t0=t0)
+        if not missing:
+            window = timedelta(minutes=float(args.get("window_minutes", 360.0)))
+            t0 = _parse_iso(args.get("t0_iso"))
+            result = ctx.orbit.close_approach(sat_a, sat_b, window=window, t0=t0)
+            return {
+                "sat_a": result.sat_a,
+                "sat_b": result.sat_b,
+                "closest_approach_km": round(result.closest_approach_km, 2),
+                "t_closest": _format_iso(result.t_closest),
+                "source": "SGP4",
+                "clock": "scenario" if args.get("t0_iso") else "wallclock",
+            }
+
+        missing_names = ", ".join(missing)
+        authored_miss = args.get("authored_miss_km")
+        if authored_miss is None:
+            authored_miss = 10.0
+        authored_tca = args.get("authored_tca_iso")
+        if not authored_tca:
+            t0 = _parse_iso(args.get("t0_iso"))
+            authored_tca = _format_iso(t0 or datetime.now(UTC))
+
         return {
-            "sat_a": result.sat_a,
-            "sat_b": result.sat_b,
-            "closest_approach_km": round(result.closest_approach_km, 2),
-            "t_closest": _format_iso(result.t_closest),
+            "sat_a": sat_a,
+            "sat_b": sat_b,
+            "closest_approach_km": round(float(authored_miss), 2),
+            "t_closest": authored_tca,
+            "source": f"scenario-authored (no TLE for {missing_names})",
+            "clock": "scenario",
         }
 
 
@@ -408,7 +429,8 @@ def _summarise_result(tool_name: str, result: dict[str, Any]) -> str:
     if tool_name == "kb.lookup":
         return f"{result.get('count', 0)} entries"
     if tool_name == "orbit.compute_close_approach":
-        return f"{result.get('closest_approach_km')} km @ {result.get('t_closest')}"
+        src = f" [{result.get('source')}]" if result.get("source") else ""
+        return f"{result.get('closest_approach_km')} km @ {result.get('t_closest')}{src}"
     if tool_name == "orbit.simulate_maneuver":
         return (
             f"pre={result.get('pre_miss_km')}km post={result.get('post_miss_km')}km "
