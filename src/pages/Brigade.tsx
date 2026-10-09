@@ -216,7 +216,22 @@ export function Brigade() {
         </div>
       </header>
 
-      <section className="command-workbench">
+      <section
+        className={`command-workbench${
+          scenarioRailCollapsed ? ' command-workbench--left-collapsed' : ''
+        }${
+          decisionStackCollapsed ? ' command-workbench--right-collapsed' : ''
+        }${
+          eventFeedCollapsed ? ' command-workbench--bottom-collapsed' : ''
+        }`}
+        style={
+          {
+            '--left-rail': scenarioRailCollapsed ? '0px' : '300px',
+            '--right-rail': decisionStackCollapsed ? '0px' : '352px',
+            '--bottom-rail': eventFeedCollapsed ? '0px' : '208px',
+          } as React.CSSProperties
+        }
+      >
         <ScenarioRail
           activeScenarioId={activeScenario.id}
           attribution={latestAttribution}

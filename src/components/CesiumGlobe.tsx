@@ -1800,146 +1800,148 @@ export function CesiumGlobe({
           </button>
         </>
       ) : null}
-      {selectedSatellite ? (
-        <aside className="satellite-detail" aria-label="Selected satellite">
-          <span>Selected Satellite</span>
-          <strong>{selectedSatellite.satelliteName}</strong>
-          <dl>
-            <div>
-              <dt>Family</dt>
-              <dd>
-                {selectedSatellite.satelliteFamily} ·{' '}
-                {FAMILY_SHORT_LABEL[selectedSatellite.satelliteFamily]}
-              </dd>
+      <div className="cesium-globe-cards" aria-label="Globe active cards">
+        {selectedSatellite ? (
+          <aside className="satellite-detail" aria-label="Selected satellite">
+            <span>Selected Satellite</span>
+            <strong>{selectedSatellite.satelliteName}</strong>
+            <dl>
+              <div>
+                <dt>Family</dt>
+                <dd>
+                  {selectedSatellite.satelliteFamily} ·{' '}
+                  {FAMILY_SHORT_LABEL[selectedSatellite.satelliteFamily]}
+                </dd>
+              </div>
+              <div>
+                <dt>NORAD</dt>
+                <dd>{selectedSatellite.satelliteId}</dd>
+              </div>
+              <div>
+                <dt>True Alt</dt>
+                <dd>{Math.round(selectedSatellite.point.alt_km).toLocaleString()} km</dd>
+              </div>
+              <div>
+                <dt>Lat / Lon</dt>
+                <dd>
+                  {(selectedSatellitePoint?.lat ?? selectedSatellite.point.lat).toFixed(2)} /{' '}
+                  {(selectedSatellitePoint?.lng ?? selectedSatellite.point.lng).toFixed(2)}
+                </dd>
+              </div>
+              <div>
+                <dt>Fix</dt>
+                <dd>
+                  {new Date(
+                    selectedSatellitePoint?.timestampUtc ??
+                      selectedSatellite.point.timestamp_utc,
+                  ).toLocaleTimeString([], {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </dd>
+              </div>
+            </dl>
+          </aside>
+        ) : null}
+        {maneuverDemo ? (
+          <aside className="maneuver-overlay" aria-label="Maneuver execution status">
+            <span className="maneuver-overlay__eyebrow">
+              {maneuverDemo.demoType === 'strike'
+                ? 'Kinetic strike inbound'
+                : maneuverDemo.demoType === 'interdiction'
+                  ? 'Link interdiction active'
+                  : 'Plane-change burn executing'}
+            </span>
+            <strong className="maneuver-overlay__title">
+              {maneuverPair?.friendly ?? maneuverDemo.friendlyLabel ?? 'Friendly'}{' '}
+              {maneuverDemo.demoType === 'strike'
+                ? '↣ neutralize'
+                : maneuverDemo.demoType === 'interdiction'
+                  ? '↯ jam'
+                  : '↦ evade'}{' '}
+              {maneuverPair?.hostile ?? maneuverDemo.hostileLabel ?? 'hostile'}
+            </strong>
+            <dl className="maneuver-overlay__metrics">
+              {maneuverDemo.demoType === 'evasion' ||
+              maneuverDemo.demoType === undefined ? (
+                <>
+                  <div>
+                    <dt>Pre-burn miss</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
+                      {maneuverDemo.preMissKm.toFixed(1)} km
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Post-burn miss</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
+                      {maneuverDemo.postMissKm.toFixed(1)} km
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Δv applied</dt>
+                    <dd className="maneuver-overlay__value">
+                      {maneuverDemo.dvMs.toFixed(2)} m/s
+                    </dd>
+                  </div>
+                </>
+              ) : maneuverDemo.demoType === 'strike' ? (
+                <>
+                  <div>
+                    <dt>Closing range</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
+                      {maneuverDemo.preMissKm.toFixed(1)} km
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>KV Δv</dt>
+                    <dd className="maneuver-overlay__value">
+                      {(maneuverDemo.dvMs * 220).toFixed(0)} m/s
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
+                      {maneuverProgress > 0.85 ? 'Neutralized' : 'Inbound'}
+                    </dd>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <dt>Target band</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
+                      Ka downlink
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Beam EIRP</dt>
+                    <dd className="maneuver-overlay__value">
+                      {(maneuverDemo.dvMs * 28).toFixed(0)} dBW
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
+                      {maneuverProgress > 0.78 ? 'Link severed' : 'Closing'}
+                    </dd>
+                  </div>
+                </>
+              )}
+            </dl>
+            <div
+              className="maneuver-overlay__progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(maneuverProgress * 100)}
+            >
+              <span style={{ width: `${Math.round(maneuverProgress * 100)}%` }} />
             </div>
-            <div>
-              <dt>NORAD</dt>
-              <dd>{selectedSatellite.satelliteId}</dd>
-            </div>
-            <div>
-              <dt>True Alt</dt>
-              <dd>{Math.round(selectedSatellite.point.alt_km).toLocaleString()} km</dd>
-            </div>
-            <div>
-              <dt>Lat / Lon</dt>
-              <dd>
-                {(selectedSatellitePoint?.lat ?? selectedSatellite.point.lat).toFixed(2)} /{' '}
-                {(selectedSatellitePoint?.lng ?? selectedSatellite.point.lng).toFixed(2)}
-              </dd>
-            </div>
-            <div>
-              <dt>Fix</dt>
-              <dd>
-                {new Date(
-                  selectedSatellitePoint?.timestampUtc ??
-                    selectedSatellite.point.timestamp_utc,
-                ).toLocaleTimeString([], {
-                  hour12: false,
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </dd>
-            </div>
-          </dl>
-        </aside>
-      ) : null}
-      {maneuverDemo ? (
-        <aside className="maneuver-overlay" aria-label="Maneuver execution status">
-          <span className="maneuver-overlay__eyebrow">
-            {maneuverDemo.demoType === 'strike'
-              ? 'Kinetic strike inbound'
-              : maneuverDemo.demoType === 'interdiction'
-                ? 'Link interdiction active'
-                : 'Plane-change burn executing'}
-          </span>
-          <strong className="maneuver-overlay__title">
-            {maneuverPair?.friendly ?? maneuverDemo.friendlyLabel ?? 'Friendly'}{' '}
-            {maneuverDemo.demoType === 'strike'
-              ? '↣ neutralize'
-              : maneuverDemo.demoType === 'interdiction'
-                ? '↯ jam'
-                : '↦ evade'}{' '}
-            {maneuverPair?.hostile ?? maneuverDemo.hostileLabel ?? 'hostile'}
-          </strong>
-          <dl className="maneuver-overlay__metrics">
-            {maneuverDemo.demoType === 'evasion' ||
-            maneuverDemo.demoType === undefined ? (
-              <>
-                <div>
-                  <dt>Pre-burn miss</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
-                    {maneuverDemo.preMissKm.toFixed(1)} km
-                  </dd>
-                </div>
-                <div>
-                  <dt>Post-burn miss</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
-                    {maneuverDemo.postMissKm.toFixed(1)} km
-                  </dd>
-                </div>
-                <div>
-                  <dt>Δv applied</dt>
-                  <dd className="maneuver-overlay__value">
-                    {maneuverDemo.dvMs.toFixed(2)} m/s
-                  </dd>
-                </div>
-              </>
-            ) : maneuverDemo.demoType === 'strike' ? (
-              <>
-                <div>
-                  <dt>Closing range</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
-                    {maneuverDemo.preMissKm.toFixed(1)} km
-                  </dd>
-                </div>
-                <div>
-                  <dt>KV Δv</dt>
-                  <dd className="maneuver-overlay__value">
-                    {(maneuverDemo.dvMs * 220).toFixed(0)} m/s
-                  </dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
-                    {maneuverProgress > 0.85 ? 'Neutralized' : 'Inbound'}
-                  </dd>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <dt>Target band</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--threat">
-                    Ka downlink
-                  </dd>
-                </div>
-                <div>
-                  <dt>Beam EIRP</dt>
-                  <dd className="maneuver-overlay__value">
-                    {(maneuverDemo.dvMs * 28).toFixed(0)} dBW
-                  </dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd className="maneuver-overlay__value maneuver-overlay__value--safe">
-                    {maneuverProgress > 0.78 ? 'Link severed' : 'Closing'}
-                  </dd>
-                </div>
-              </>
-            )}
-          </dl>
-          <div
-            className="maneuver-overlay__progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(maneuverProgress * 100)}
-          >
-            <span style={{ width: `${Math.round(maneuverProgress * 100)}%` }} />
-          </div>
-        </aside>
-      ) : null}
+          </aside>
+        ) : null}
+      </div>
       <div className="map-stage__mode">{imageryMode}</div>
       <div className="cesium-credits" ref={creditRef} />
     </>

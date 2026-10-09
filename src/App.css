@@ -1512,12 +1512,39 @@
   opacity: 0.48;
 }
 
-.satellite-detail {
+.cesium-globe-cards {
   position: absolute;
-  right: 14px;
-  bottom: 56px;
-  z-index: 5;
-  width: min(380px, calc(100% - 28px));
+  right: calc(var(--right-rail, 0px) + 14px);
+  bottom: calc(var(--bottom-rail, 0px) + 44px);
+  z-index: 15;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  width: min(380px, calc(100% - var(--left-rail, 0px) - var(--right-rail, 0px) - 28px));
+  max-height: calc(100% - var(--bottom-rail, 0px) - 210px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  pointer-events: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(154, 190, 180, 0.45) transparent;
+  transition: right 0.28s cubic-bezier(0.5, 0, 0.2, 1),
+              bottom 0.28s cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+.cesium-globe-cards::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cesium-globe-cards::-webkit-scrollbar-thumb {
+  background: rgba(154, 190, 180, 0.45);
+  border-radius: 3px;
+}
+
+.satellite-detail {
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
+  flex-shrink: 0;
   border: 1px solid rgba(201, 164, 87, 0.42);
   border-radius: 2px;
   background:
@@ -1572,12 +1599,10 @@
 }
 
 .maneuver-overlay {
-  position: absolute;
-  left: 50%;
-  bottom: 56px;
-  transform: translateX(-50%);
-  z-index: 6;
-  width: min(460px, calc(100% - 32px));
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
+  flex-shrink: 0;
   border: 1px solid rgba(34, 197, 94, 0.55);
   border-radius: 3px;
   background:
@@ -1595,11 +1620,11 @@
 @keyframes maneuver-overlay-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 12px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
 }
 
@@ -4021,7 +4046,7 @@
   background: transparent;
 }
 
-@media (min-width: 1081px) {
+@media (min-width: 1000px) {
   .brigade-shell {
     grid-template-rows: 48px minmax(0, 1fr);
     gap: 0;
@@ -5662,7 +5687,7 @@
 .panel-tab {
   display: none;
 }
-@media (min-width: 1081px) {
+@media (min-width: 1000px) {
   .panel-tab {
     display: flex;
   }
@@ -5691,7 +5716,7 @@
 /* Bottom edge — horizontal tab at the top of the event feed strip. */
 .panel-tab--bottom-edge {
   left: 50%;
-  bottom: 208px;
+  bottom: var(--bottom-rail, 208px);
   width: 220px;
   height: 32px;
   transform: translateX(-50%);
@@ -5730,11 +5755,17 @@
    right rail so they remain reachable. The base right:14px applies on
    narrower viewports where the sidebar is laid out below rather than
    overlaid. */
-@media (min-width: 1081px) {
+@media (min-width: 1000px) {
   .cesium-scenario-controls,
   .satellite-family-controls,
-  .orbit-toggle,
-  .satellite-detail {
+  .orbit-toggle {
     right: calc(var(--right-rail, 352px) + 14px);
+  }
+
+  .cesium-globe-cards {
+    right: calc(var(--right-rail, 352px) + 44px);
+    bottom: calc(var(--bottom-rail, 208px) + 38px);
+    width: min(380px, calc(100% - var(--left-rail, 300px) - var(--right-rail, 352px) - 88px));
+    max-height: calc(100% - var(--bottom-rail, 208px) - 180px);
   }
 }
