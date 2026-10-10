@@ -43,12 +43,25 @@ interface Props {
 
 export function ReasoningPanel({ compact = false }: Props) {
   const traces = useEventStore((s) => s.traces)
+  const activeTraceRefId = useEventStore((s) => s.activeTraceRefId)
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const el = ref.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [traces.length])
+    if (el && !activeTraceRefId) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [traces.length, activeTraceRefId])
+
+  useEffect(() => {
+    if (!activeTraceRefId || !ref.current) return
+    const matched = ref.current.querySelector(
+      `[data-ref-id="${activeTraceRefId}"]`,
+    )
+    if (matched) {
+      matched.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [activeTraceRefId])
 
   const clear = () => {
     useEventStore.getState().reset()
@@ -81,17 +94,41 @@ export function ReasoningPanel({ compact = false }: Props) {
             waiting for engine output…
           </div>
         ) : (
-          traces.map((trace) => <TraceLine key={trace.id} trace={trace} />)
+          traces.map((trace) => {
+            const isHighlighted =
+              Boolean(activeTraceRefId) &&
+              (trace.ref_id === activeTraceRefId ||
+                trace.payload?.attribution_id === activeTraceRefId)
+            return (
+              <TraceLine
+                key={trace.id}
+                trace={trace}
+                isHighlighted={isHighlighted}
+              />
+            )
+          })
         )}
       </div>
     </section>
   )
 }
 
-function TraceLine({ trace }: { trace: ReasoningTrace }) {
+function TraceLine({
+  trace,
+  isHighlighted = false,
+}: {
+  trace: ReasoningTrace
+  isHighlighted?: boolean
+}) {
   const color = STAGE_COLORS[trace.stage] ?? 'var(--text-muted)'
   return (
-    <div className={`reasoning-line reasoning-line--${trace.level}`}>
+    <div
+      id={`trace-${trace.id}`}
+      data-ref-id={trace.ref_id ?? undefined}
+      className={`reasoning-line reasoning-line--${trace.level}${
+        isHighlighted ? ' reasoning-line--highlighted' : ''
+      }`}
+    >
       <span className="reasoning-line__time">{formatTime(trace.ts)}</span>
       <span className="reasoning-line__stage" style={{ color }}>
         [{STAGE_LABEL[trace.stage] ?? trace.stage}]

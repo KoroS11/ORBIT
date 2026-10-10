@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -195,7 +196,54 @@ def create_app() -> FastAPI:
         if hasattr(app.state, "engine"):
             app.state.engine.reset()
             await app.state.engine.bus.publish("system.reset", {"type": "reset"})
+        app.state.decision_reviews = {}
         return {"status": "reset"}
+
+    @app.get("/decisions/reviews")
+    async def get_decision_reviews() -> dict[str, Any]:
+        reviews = getattr(app.state, "decision_reviews", {})
+        return {"reviews": reviews}
+
+    @app.post("/decisions/{decision_id}/review")
+    async def review_decision(
+        decision_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        status = payload.get("status", "approved")
+        actor = payload.get("actor", "OPERATOR-01")
+        timestamp = payload.get("timestamp") or datetime.now(UTC).isoformat()
+        review = {
+            "decision_id": decision_id,
+            "status": status,
+            "actor": actor,
+            "timestamp": timestamp,
+        }
+        if not hasattr(app.state, "decision_reviews"):
+            app.state.decision_reviews = {}
+        app.state.decision_reviews[decision_id] = review
+
+        if hasattr(app.state, "engine"):
+            engine = app.state.engine
+            await engine.bus.publish(
+                f"decisions.{status}",
+                {
+                    "type": "decision_review",
+                    "decision_id": decision_id,
+                    "status": status,
+                    "actor": actor,
+                    "timestamp": timestamp,
+                },
+            )
+            tracer = getattr(engine, "tracer", None)
+            if tracer is not None:
+                await tracer.emit(
+                    "decide",
+                    "decision",
+                    f"Decision {decision_id} marked as {status.upper()} by {actor}",
+                    ref_id=decision_id,
+                    status=status,
+                    actor=actor,
+                )
+        return review
 
     @app.post("/scenarios/{name}/replay")
     async def replay_scenario(name: str, speed: float = 5.0) -> dict[str, Any]:

@@ -10,6 +10,7 @@ Anthropic tool-use loop and the deterministic stub planner.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -395,9 +396,12 @@ async def dispatch(
     ref_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute a tool and emit a tools-stage trace before/after."""
+    t0 = time.perf_counter()
     try:
         result = await tool.execute(args, ctx)
+        duration_ms = round((time.perf_counter() - t0) * 1000, 2)
     except Exception as exc:  # noqa: BLE001
+        duration_ms = round((time.perf_counter() - t0) * 1000, 2)
         log.exception("decide tool %s failed: %s", tool.name, exc)
         if ctx.tracer is not None:
             await ctx.tracer.emit(
@@ -407,10 +411,17 @@ async def dispatch(
                 ref_id=ref_id,
                 tool=tool.name,
                 args=args,
+                duration_ms=duration_ms,
+                status="error",
             )
         return {"error": str(exc)}
     if ctx.tracer is not None:
         summary = _summarise_result(tool.name, result)
+        status = (
+            "error"
+            if "error" in result
+            else ("invalid" if result.get("valid") is False else "success")
+        )
         await ctx.tracer.emit(
             "tools",
             "tool",
@@ -419,6 +430,8 @@ async def dispatch(
             tool=tool.name,
             args=args,
             result=result,
+            duration_ms=duration_ms,
+            status=status,
         )
     return result
 

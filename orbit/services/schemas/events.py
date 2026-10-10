@@ -169,6 +169,8 @@ class Attribution(_Event):
     predicted_next: str | None = None
     kb_citations: list[str] = Field(default_factory=list)
     source_signal_ids: list[str] = Field(default_factory=list)
+    reconcile_rationale: str | None = None
+    redteam_challenge: str | None = None
 
 
 class Decision(_Event):

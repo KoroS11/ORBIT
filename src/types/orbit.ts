@@ -84,6 +84,15 @@ export type Attribution = {
   predicted_next: string | null
   kb_citations: string[]
   source_signal_ids: string[]
+  reconcile_rationale?: string | null
+  redteam_challenge?: string | null
+}
+
+export type DecisionReview = {
+  decision_id: string
+  status: 'approved' | 'rejected'
+  actor: string
+  timestamp: string
 }
 
 export type Decision = {

@@ -784,6 +784,11 @@ class StubLLMClient:
         for objection in challenge.objections:
             evidence.append(f"Red-team objection: {objection}")
 
+        reconcile_rationale = (
+            f"Reconciled: primary {primary.actor} ({primary.confidence:.2f}) challenged with delta "
+            f"{challenge.confidence_delta:+.2f} → final {primary.actor} ({round(new_confidence, 3):.2f})"
+        )
+
         return Attribution(
             anomaly_ids=list(primary.anomaly_ids),
             actor=primary.actor,
@@ -793,6 +798,8 @@ class StubLLMClient:
             predicted_next=primary.predicted_next,
             kb_citations=list(primary.kb_citations),
             source_signal_ids=list(primary.source_signal_ids),
+            reconcile_rationale=reconcile_rationale,
+            redteam_challenge=challenge.rationale,
         )
 
     async def decide(self, attribution: Attribution) -> Decision:

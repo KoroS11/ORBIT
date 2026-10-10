@@ -5,6 +5,7 @@ import type {
   Attribution,
   ConnectionStatus,
   Decision,
+  DecisionReview,
   KBEntry,
   OsintEmbeddingSnapshot,
   ReasoningTrace,
@@ -106,6 +107,10 @@ interface EventState {
   acceptedDecisionIds: Set<string>;
   /** Decision ids the operator denied in the left-rail action panel. */
   deferredDecisionIds: Set<string>;
+  /** Persisted review records for decisions (approved/rejected with actor + timestamp). */
+  decisionReviews: Record<string, DecisionReview>;
+  /** Currently highlighted trace refId (e.g. decision id). */
+  activeTraceRefId: string | null;
   /** Live maneuver-demo overlay state. When set, the Cesium globe runs
    *  the accept-action visualization (hostile approach → friendly burn
    *  → miss). Cleared automatically when the animation finishes. */
@@ -132,6 +137,9 @@ interface EventState {
   acceptDecision: (id: string) => void;
   deferDecision: (id: string) => void;
   clearDecisionStatus: (id: string) => void;
+  reviewDecision: (id: string, status: "approved" | "rejected", actor?: string) => void;
+  setDecisionReviews: (reviews: Record<string, DecisionReview>) => void;
+  setActiveTraceRefId: (refId: string | null) => void;
   startManeuverDemo: (demo: ManeuverDemo) => void;
   endManeuverDemo: () => void;
   openTakeover: (event: UIEvent) => void;
@@ -157,6 +165,9 @@ const initialState = (): Omit<
   | "acceptDecision"
   | "deferDecision"
   | "clearDecisionStatus"
+  | "reviewDecision"
+  | "setDecisionReviews"
+  | "setActiveTraceRefId"
   | "startManeuverDemo"
   | "endManeuverDemo"
   | "openTakeover"
@@ -181,6 +192,8 @@ const initialState = (): Omit<
   approvedEventIds: new Set(),
   acceptedDecisionIds: new Set(),
   deferredDecisionIds: new Set(),
+  decisionReviews: {},
+  activeTraceRefId: null,
   maneuverDemo: null,
   takeoverEvent: null,
   kb: {},
@@ -278,8 +291,47 @@ export const useEventStore = create<EventState>()(
       const deferredDecisionIds = new Set(state.deferredDecisionIds);
       acceptedDecisionIds.delete(id);
       deferredDecisionIds.delete(id);
-      return { acceptedDecisionIds, deferredDecisionIds };
+      const decisionReviews = { ...state.decisionReviews };
+      delete decisionReviews[id];
+      return { acceptedDecisionIds, deferredDecisionIds, decisionReviews };
     }),
+  reviewDecision: (id, status, actor = "OPERATOR-01") => {
+    const timestamp = new Date().toISOString();
+    const review: DecisionReview = {
+      decision_id: id,
+      status,
+      actor,
+      timestamp,
+    };
+    set((state) => {
+      const nextReviews = { ...state.decisionReviews, [id]: review };
+      const acceptedDecisionIds = new Set(state.acceptedDecisionIds);
+      const deferredDecisionIds = new Set(state.deferredDecisionIds);
+      if (status === "approved") {
+        acceptedDecisionIds.add(id);
+        deferredDecisionIds.delete(id);
+      } else {
+        deferredDecisionIds.add(id);
+        acceptedDecisionIds.delete(id);
+      }
+      return {
+        decisionReviews: nextReviews,
+        acceptedDecisionIds,
+        deferredDecisionIds,
+      };
+    });
+    const apiUrl = import.meta.env.VITE_ORBIT_API_URL ?? "http://127.0.0.1:8000";
+    void fetch(`${apiUrl}/decisions/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, actor, timestamp }),
+    }).catch(() => {});
+  },
+  setDecisionReviews: (reviews) =>
+    set((state) => ({
+      decisionReviews: { ...state.decisionReviews, ...reviews },
+    })),
+  setActiveTraceRefId: (activeTraceRefId) => set({ activeTraceRefId }),
   startManeuverDemo: (demo) => set({ maneuverDemo: demo }),
   endManeuverDemo: () => set({ maneuverDemo: null }),
   openTakeover: (event) => set({ takeoverEvent: event }),
@@ -306,6 +358,7 @@ export const useEventStore = create<EventState>()(
         anomalies: state.anomalies,
         attributions: state.attributions,
         decisions: state.decisions,
+        decisionReviews: state.decisionReviews,
         uiEvents: state.uiEvents,
         traces: state.traces,
         embeddingSnapshot: state.embeddingSnapshot,

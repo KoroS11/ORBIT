@@ -1,5 +1,6 @@
 import { useEventStore } from '../store/eventStore'
 import { ActionLog } from '../components/ActionLog'
+import { DecisionRail } from '../components/DecisionRail'
 import { EmbeddingViz } from '../components/EmbeddingViz'
 import { ReasoningPanel } from '../components/ReasoningPanel'
 import { useOrbitSocket } from '../hooks/useOrbitSocket'
@@ -12,10 +13,7 @@ export function Operator() {
   // the user toggles back to Brigade and a re-render fires.
   useOrbitSocket()
 
-  const signals = useEventStore((s) => s.signals)
   const anomalies = useEventStore((s) => s.anomalies)
-  const decisions = useEventStore((s) => s.decisions)
-  const needApproval = decisions.filter((d) => d.authority === 'request').length
 
   return (
     <main className="operator-shell">
@@ -49,32 +47,7 @@ export function Operator() {
             </ul>
           )}
         </div>
-        <div className="panel operator-panel--decision">
-          <div className="panel__header">
-            <h2>Decision Rail</h2>
-            <span>
-              {decisions.length} {decisions.length === 1 ? 'decision' : 'decisions'},{' '}
-              {needApproval} {needApproval === 1 ? 'needs' : 'need'} approval
-            </span>
-          </div>
-          {decisions.length === 0 ? (
-            <p className="operator-shell__empty">No authority requests</p>
-          ) : (
-            <ul className="operator-list">
-              {decisions.map((d) => (
-                <li key={d.id}>
-                  <span className="operator-list__kind">{d.action}</span>
-                  <span className="operator-list__sev">
-                    {d.authority} · {d.target}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="operator-shell__footer" aria-live="polite">
-            {signals.length} signals streamed
-          </div>
-        </div>
+        <DecisionRail />
         <ActionLog limit={20} />
         <EmbeddingViz />
         <ReasoningPanel />

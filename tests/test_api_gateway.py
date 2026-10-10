@@ -101,3 +101,19 @@ def test_post_reset_endpoint(client: TestClient) -> None:
     response = client.post("/reset")
     assert response.status_code == 200
     assert response.json() == {"status": "reset"}
+
+
+def test_decision_review_endpoint(client: TestClient) -> None:
+    post_resp = client.post(
+        "/decisions/dec-test-99/review",
+        json={"status": "approved", "actor": "OPERATOR-01"},
+    )
+    assert post_resp.status_code == 200
+    review = post_resp.json()
+    assert review["decision_id"] == "dec-test-99"
+    assert review["status"] == "approved"
+    assert review["actor"] == "OPERATOR-01"
+
+    get_resp = client.get("/decisions/reviews")
+    assert get_resp.status_code == 200
+    assert "dec-test-99" in get_resp.json()["reviews"]

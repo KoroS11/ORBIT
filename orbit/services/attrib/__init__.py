@@ -186,6 +186,15 @@ class AttribService:
                     attribution = await self._llm.reconcile(
                         primary, challenge, anomalies, context
                     )
+                    attribution_updates: dict[str, Any] = {}
+                    if not getattr(attribution, "redteam_challenge", None):
+                        attribution_updates["redteam_challenge"] = challenge.rationale
+                    if not getattr(attribution, "reconcile_rationale", None):
+                        attribution_updates["reconcile_rationale"] = (
+                            f"Reconciled {attribution.actor} ({attribution.confidence:.2f}) with delta {challenge.confidence_delta:+.2f}"
+                        )
+                    if attribution_updates:
+                        attribution = attribution.model_copy(update=attribution_updates)
                 except Exception:
                     log.exception(
                         "attrib: reconcile failed for primary=%s", primary.id
