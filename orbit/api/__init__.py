@@ -15,7 +15,9 @@ gets the same firehose. Brigade vs Operator filtering is the client's job.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,6 +50,35 @@ _FANOUT_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _get_state_file() -> Path:
+    state_dir = os.environ.get("ORBIT_STATE_DIR")
+    if state_dir:
+        p = Path(state_dir)
+    else:
+        p = ROOT / "data" / "state"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "decision_reviews.json"
+
+
+def _load_decision_reviews() -> dict[str, Any]:
+    state_file = _get_state_file()
+    if state_file.exists():
+        try:
+            return json.loads(state_file.read_text(encoding="utf-8"))
+        except Exception:
+            log.warning("Failed to load decision reviews from %s", state_file)
+    return {}
+
+
+def _persist_decision_reviews(reviews: dict[str, Any]) -> None:
+    try:
+        state_file = _get_state_file()
+        state_file.write_text(json.dumps(reviews, indent=2), encoding="utf-8")
+    except Exception:
+        log.warning("Failed to persist decision reviews")
+
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     load_dotenv()
@@ -61,6 +92,7 @@ async def _lifespan(app: FastAPI):
         blocked_domains_provider=lambda: app.state.blocked_domains,
     )
     app.state.engine = engine
+    app.state.decision_reviews = _load_decision_reviews()
     app.state.clients = set()
     app.state.replay_task = None
     app.state.engine_tasks = start_engine_tasks(engine)
@@ -107,12 +139,20 @@ async def _fanout(bus, pattern: str, kind: str, clients: set[WebSocket]) -> None
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ORBIT Engine Gateway", lifespan=_lifespan)
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    env_origins = os.environ.get("ORBIT_ALLOWED_ORIGINS")
+    if env_origins:
+        for orig in env_origins.split(","):
+            cleaned = orig.strip()
+            if cleaned and cleaned not in allowed_origins:
+                allowed_origins.append(cleaned)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=allowed_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -197,6 +237,7 @@ def create_app() -> FastAPI:
             app.state.engine.reset()
             await app.state.engine.bus.publish("system.reset", {"type": "reset"})
         app.state.decision_reviews = {}
+        _persist_decision_reviews({})
         return {"status": "reset"}
 
     @app.get("/decisions/reviews")
@@ -220,6 +261,7 @@ def create_app() -> FastAPI:
         if not hasattr(app.state, "decision_reviews"):
             app.state.decision_reviews = {}
         app.state.decision_reviews[decision_id] = review
+        _persist_decision_reviews(app.state.decision_reviews)
 
         if hasattr(app.state, "engine"):
             engine = app.state.engine

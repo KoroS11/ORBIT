@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
+import { getApiBaseUrl } from '../lib/apiConfig'
 import type { Domain } from '../types/orbit'
 
-const API_URL =
-  import.meta.env.VITE_ORBIT_API_URL ?? 'http://localhost:8000'
+const API_URL = getApiBaseUrl()
 
 const ALL_DOMAINS: Domain[] = [
   'sda',

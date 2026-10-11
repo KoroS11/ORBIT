@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getApiBaseUrl } from '../lib/apiConfig'
 
 const TOOLTIP_TEXT =
   'Scenario signals are authored (synthetic); orbital propagation uses cached real orbital elements where available.'
@@ -13,7 +14,7 @@ export function DataProvenanceBadge() {
   const [provider, setProvider] = useState<string>('stub')
 
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_ORBIT_API_URL ?? 'http://127.0.0.1:8000'
+    const apiUrl = getApiBaseUrl()
     fetch(`${apiUrl}/health`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: HealthResponse | null) => {

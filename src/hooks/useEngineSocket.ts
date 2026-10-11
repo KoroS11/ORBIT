@@ -8,12 +8,11 @@ import type {
   WSEnvelope,
 } from "../types/orbit";
 
-// Backend URLs. Vite proxies during dev would also work, but for a hackathon
-// demo a hard-coded localhost is fine.
-const API_URL =
-  import.meta.env.VITE_ORBIT_API_URL ?? "http://localhost:8000";
-const WS_URL =
-  API_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+import { getApiBaseUrl, getWsUrl } from "../lib/apiConfig";
+
+const API_URL = getApiBaseUrl();
+const WS_URL = getWsUrl();
+
 
 const RECONNECT_BACKOFFS_MS = [500, 1500, 4000];
 const FIXTURE_REPLAY_INTERVAL_MS = 3000;

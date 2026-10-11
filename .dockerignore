@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Environment files and credentials
+.env
+.env.*
+deploy.env
+*.pem
+*.key
+*.cert
+*secret*
+*token*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+tests/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.log
+
+# Documentation and planning artifacts
+docs/
+.planning/
+*.md
+
+# Local runtime state
+data/state/
+data/decision_reviews.json
+data/kb.sqlite
+data/kb.sqlite-journal

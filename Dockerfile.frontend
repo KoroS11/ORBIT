@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+# Stage 1: Build frontend static distribution
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# Stage 2: Caddy server with built static assets
+FROM caddy:2-alpine
+
+# Copy built frontend assets to Caddy web root
+COPY --from=builder /app/dist /srv
+
+# Copy Caddy configuration
+COPY Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 80 443
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1

@@ -1,0 +1,41 @@
+services:
+  backend:
+    image: ghcr.io/koros11/orbit-backend:latest
+    container_name: orbit-backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    env_file:
+      - deploy.env
+    environment:
+      - OMP_NUM_THREADS=2
+      - ORBIT_STATE_DIR=/app/data/state
+    mem_limit: 1400m
+    volumes:
+      - backend_state:/app/data/state
+    deploy:
+      resources:
+        limits:
+          memory: 1400M
+
+  caddy:
+    image: ghcr.io/koros11/orbit-frontend:latest
+    container_name: orbit-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - deploy.env
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+volumes:
+  caddy_data:
+  caddy_config:
+  backend_state:

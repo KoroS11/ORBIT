@@ -12,13 +12,11 @@ import type {
   Signal,
   UIEvent,
 } from '../types/orbit'
+import { getApiBaseUrl, getWsUrl } from '../lib/apiConfig'
 
 export const MOCK_URL: string | null = null
-const API_URL = import.meta.env.VITE_ORBIT_API_URL ?? 'http://127.0.0.1:8000'
-const DEV_BRIDGE_URL = API_URL.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws'
-const configuredUrl = import.meta.env.VITE_ORBIT_WS_URL?.trim()
-const DEFAULT_URL: string | null =
-  configuredUrl || (import.meta.env.DEV ? DEV_BRIDGE_URL : MOCK_URL)
+const API_URL = getApiBaseUrl()
+const DEFAULT_URL: string = getWsUrl()
 
 const RECONNECT_BACKOFFS_MS = [500, 1500, 4000]
 const FIXTURE_REPLAY_INTERVAL_MS = 3000

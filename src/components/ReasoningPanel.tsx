@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { getApiBaseUrl } from '../lib/apiConfig'
 import { useEventStore } from '../store/eventStore'
 import type { ReasoningTrace, TraceStage } from '../types/orbit'
 
@@ -65,7 +66,7 @@ export function ReasoningPanel({ compact = false }: Props) {
 
   const clear = () => {
     useEventStore.getState().reset()
-    const apiUrl = import.meta.env.VITE_ORBIT_API_URL ?? 'http://127.0.0.1:8000'
+    const apiUrl = getApiBaseUrl()
     void fetch(`${apiUrl}/reset`, { method: 'POST' }).catch(() => {})
   }
 

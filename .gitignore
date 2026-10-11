@@ -16,10 +16,14 @@ __pycache__/
 .env
 .env.*
 !.env.example
+deploy.env
+!deploy.env.example
 
-# Generated data
+# Generated data and runtime state
 data/kb.sqlite
 data/kb.sqlite-journal
+data/state/
+data/decision_reviews.json
 
 # Node / Vite
 node_modules

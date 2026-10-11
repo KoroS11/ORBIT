@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { getApiBaseUrl } from "../lib/apiConfig";
 import type {
   Anomaly,
   Attribution,
@@ -320,7 +321,7 @@ export const useEventStore = create<EventState>()(
         deferredDecisionIds,
       };
     });
-    const apiUrl = import.meta.env.VITE_ORBIT_API_URL ?? "http://127.0.0.1:8000";
+    const apiUrl = getApiBaseUrl();
     void fetch(`${apiUrl}/decisions/${encodeURIComponent(id)}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
