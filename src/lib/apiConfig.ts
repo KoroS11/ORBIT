@@ -14,8 +14,8 @@ export function getApiBaseUrl(): string {
     return import.meta.env.VITE_ORBIT_API_URL.replace(/\/$/, '')
   }
   if (typeof window !== 'undefined') {
-    // If running on Vite dev server port 5173 without proxy, default to local backend
-    if (window.location.port === '5173') {
+    // If running on Vite dev (5173) or preview (4173) without reverse proxy, default to local backend
+    if (window.location.port === '5173' || window.location.port === '4173') {
       return 'http://127.0.0.1:8000'
     }
     // In production same-origin deployment, use empty string for relative REST paths
@@ -32,7 +32,7 @@ export function getWsUrl(): string {
     return import.meta.env.VITE_ORBIT_API_URL.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws'
   }
   if (typeof window !== 'undefined') {
-    if (window.location.port === '5173') {
+    if (window.location.port === '5173' || window.location.port === '4173') {
       return 'ws://127.0.0.1:8000/ws'
     }
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
