@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ActionLog } from '../components/ActionLog'
 import { ApproveBanner } from '../components/ApproveBanner'
 import { CollapsibleStackSection } from '../components/CollapsibleStackSection'
+import { DataProvenanceBadge } from '../components/DataProvenanceBadge'
 import { EmbeddingViz } from '../components/EmbeddingViz'
 import { EventFeed } from '../components/EventFeed'
 import { MapStage } from '../components/MapStage'
@@ -210,6 +211,7 @@ export function Brigade() {
           <h1>Brigade COP</h1>
         </div>
         <div className="app-header__right">
+          <DataProvenanceBadge />
           <span
             className={
               isEngineLive

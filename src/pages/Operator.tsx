@@ -1,5 +1,6 @@
 import { useEventStore } from '../store/eventStore'
 import { ActionLog } from '../components/ActionLog'
+import { DataProvenanceBadge } from '../components/DataProvenanceBadge'
 import { DecisionRail } from '../components/DecisionRail'
 import { EmbeddingViz } from '../components/EmbeddingViz'
 import { ReasoningPanel } from '../components/ReasoningPanel'
@@ -23,6 +24,7 @@ export function Operator() {
           <h1>Fusion Console</h1>
         </div>
         <div className="app-header__right">
+          <DataProvenanceBadge />
           <a href="/brigade">Brigade View</a>
         </div>
       </header>

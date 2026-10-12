@@ -143,6 +143,8 @@ def create_app() -> FastAPI:
     allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
     ]
     env_origins = os.environ.get("ORBIT_ALLOWED_ORIGINS")
     if env_origins:

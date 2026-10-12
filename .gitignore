@@ -58,3 +58,6 @@ Thumbs.db
 # Bench-generated scenario variants
 bench/scorecard.json
 bench/compare/
+
+# Frontend audit artifacts
+frontend/audit/
