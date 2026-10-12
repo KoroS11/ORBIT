@@ -13,10 +13,12 @@ Env:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 from orbit.services.kb import KB
@@ -42,11 +44,74 @@ RETRY_STATUS = {429, 500, 503}
 MAX_ATTEMPTS = 4
 
 
+def _get_cache_file() -> Path:
+    state_dir = os.environ.get("ORBIT_STATE_DIR")
+    if state_dir:
+        p = Path(state_dir)
+    else:
+        p = Path(__file__).resolve().parents[3] / "data" / "state"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "gemini_cache.json"
+
+
+class GeminiPromptCache:
+    """Persistent prompt-hash cache under ORBIT_STATE_DIR."""
+
+    def __init__(self, cache_file: Path | None = None) -> None:
+        self._path = cache_file if cache_file is not None else _get_cache_file()
+        self._memory: dict[str, Any] = self._load()
+
+    def _load(self) -> dict[str, Any]:
+        if self._path.exists():
+            try:
+                return json.loads(self._path.read_text(encoding="utf-8"))
+            except Exception:
+                log.warning("Failed to load Gemini cache from %s", self._path)
+        return {}
+
+    def _persist(self) -> None:
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(json.dumps(self._memory, indent=2), encoding="utf-8")
+        except Exception:
+            log.warning("Failed to persist Gemini cache to %s", self._path)
+
+    def get(self, key: str) -> Any | None:
+        return self._memory.get(key)
+
+    def set(self, key: str, value: Any) -> None:
+        self._memory[key] = value
+        self._persist()
+
+    def compute_key(
+        self,
+        *,
+        model: str,
+        system: str,
+        prompt: str,
+        temperature: float = 0.2,
+        thinking_budget: int | None = None,
+        schema: dict[str, Any] | None = None,
+    ) -> str:
+        payload = {
+            "model": model,
+            "system": system,
+            "prompt": prompt,
+            "temperature": temperature,
+            "thinking_budget": thinking_budget,
+            "schema": schema,
+        }
+        raw = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def _retry_delay(resp: Any, attempt: int) -> float:
     try:
-        return min(float(resp.headers["retry-after"]), 30.0)
+        if hasattr(resp, "headers") and "retry-after" in resp.headers:
+            return min(float(resp.headers["retry-after"]), 30.0)
     except (KeyError, ValueError):
-        return float(2**attempt)
+        pass
+    return float(2**attempt)
 
 
 def _response_text(data: dict) -> str:
@@ -78,6 +143,7 @@ class GeminiLLMClient(OllamaLLMClient):
         timeout_s: float | None = None,
         thinking_budget: int | None = None,
         transport: Any | None = None,
+        cache: GeminiPromptCache | None = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
         self._kb = kb
@@ -106,6 +172,8 @@ class GeminiLLMClient(OllamaLLMClient):
             else None
         )
         self._transport = transport
+        self._cache = cache if cache is not None else GeminiPromptCache()
+        self.last_provider: str = "gemini"
         log.info(
             "gemini: model=%s timeout=%.0fs thinking_budget=%s",
             self._model,
@@ -121,6 +189,20 @@ class GeminiLLMClient(OllamaLLMClient):
             "Reply with a single JSON object that conforms to this schema:\n"
             f"```json\n{json.dumps(schema, indent=2)}\n```"
         )
+        cache_key = self._cache.compute_key(
+            model=self._model,
+            system=system,
+            prompt=prompt,
+            temperature=0.2,
+            thinking_budget=self._thinking_budget,
+            schema=schema,
+        )
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            log.info("gemini: cache hit for key %s", cache_key[:12])
+            self.last_provider = "gemini-cache"
+            return cached
+
         gen_config: dict[str, Any] = {
             "temperature": 0.2,
             "responseMimeType": "application/json",
@@ -153,7 +235,10 @@ class GeminiLLMClient(OllamaLLMClient):
                     await asyncio.sleep(delay)
                     continue
                 resp.raise_for_status()
-                return _extract_json(_response_text(resp.json()))
+                parsed = _extract_json(_response_text(resp.json()))
+                self._cache.set(cache_key, parsed)
+                self.last_provider = "gemini"
+                return parsed
         raise RuntimeError("gemini: retries exhausted")
 
     async def attribute_primary(
@@ -184,10 +269,17 @@ class FallbackLLMClient:
     def __init__(self, primary: Any, fallback: Any) -> None:
         self._primary = primary
         self._fallback = fallback
+        self.last_provider: str = getattr(primary, "last_provider", "gemini")
+
+    @property
+    def current_provider(self) -> str:
+        return self.last_provider
 
     async def _call(self, name: str, *args: Any) -> Any:
         try:
-            return await getattr(self._primary, name)(*args)
+            result = await getattr(self._primary, name)(*args)
+            self.last_provider = getattr(self._primary, "last_provider", "gemini")
+            return result
         except Exception as exc:  # noqa: BLE001 - CancelledError is not an Exception
             log.warning(
                 "llm: %s failed (%s: %s); using fallback",
@@ -195,6 +287,7 @@ class FallbackLLMClient:
                 type(exc).__name__,
                 exc,
             )
+            self.last_provider = "stub"
             return await getattr(self._fallback, name)(*args)
 
     async def attribute(self, anomalies, kb_context=()):

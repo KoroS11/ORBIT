@@ -122,13 +122,15 @@ class DecideService:
                 decision.authority,
             )
             if self._tracer is not None:
+                provider = getattr(self._llm, "last_provider", "stub")
                 await self._tracer.emit(
                     "decide",
                     "decision",
-                    f"action={decision.action} authority={decision.authority} target={decision.target}",
+                    f"[{provider}] action={decision.action} authority={decision.authority} target={decision.target}",
                     ref_id=decision.id,
                     attribution_id=event.id,
                     actor=event.actor,
+                    provider=provider,
                 )
 
     # ---- Maneuver enrichment ---------------------------------------------

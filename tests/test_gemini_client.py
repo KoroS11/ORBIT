@@ -250,3 +250,104 @@ async def test_gemini_thinking_budget_absent_when_unset(monkeypatch) -> None:
     req_body = json.loads(captured_requests[0].content)
     assert "thinkingConfig" not in req_body["generationConfig"]
 
+
+async def test_gemini_prompt_cache_hit_and_miss(tmp_path: Path) -> None:
+    """Cache stores response on miss and returns it on second call without network requests."""
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "test_cache.json"
+    cache = GeminiPromptCache(cache_file=cache_file)
+
+    network_calls = 0
+    canned_payload = {
+        "actor": "China",
+        "confidence": 0.81,
+        "evidence": ["satellite maneuver observed"],
+        "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+    }
+
+    class _CountingTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal network_calls
+            network_calls += 1
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_CountingTransport(),
+        cache=cache,
+    )
+
+    test_anomaly = _anomaly()
+
+    # First call: cache miss, runs network request
+    attr1 = await client.attribute([test_anomaly])
+    assert network_calls == 1
+    assert client.last_provider == "gemini"
+    assert attr1.actor == "China"
+
+    # Second call: identical prompt hits cache
+    attr2 = await client.attribute([test_anomaly])
+    assert network_calls == 1  # No additional network call!
+    assert client.last_provider == "gemini-cache"
+    assert attr2.actor == "China"
+
+
+async def test_gemini_prompt_cache_disk_persistence(tmp_path: Path) -> None:
+    """Cached entries persist across client instances."""
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "persisted_cache.json"
+    cache1 = GeminiPromptCache(cache_file=cache_file)
+    cache1.set("key-123", {"status": "persisted"})
+
+    cache2 = GeminiPromptCache(cache_file=cache_file)
+    assert cache2.get("key-123") == {"status": "persisted"}
+
+
+async def test_gemini_provider_tags_in_fallback() -> None:
+    """Fallback client reports 'gemini' on success and 'stub' on 429 exhaustion."""
+    class _Error429Transport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, headers={"retry-after": "0"}, json={"error": "exhausted"})
+
+    import orbit.services.llm.gemini_client as gemini_mod
+    orig_sleep = gemini_mod.asyncio.sleep
+    async def _noop(_: float) -> None: pass
+    gemini_mod.asyncio.sleep = _noop
+
+    try:
+        kb = _kb()
+        primary = GeminiLLMClient(
+            kb,
+            api_key=FAKE_KEY,
+            model="gemini-2.5-flash",
+            transport=_Error429Transport(),
+        )
+        stub = StubLLMClient(kb)
+        fallback = FallbackLLMClient(primary, stub)
+
+        attr = await fallback.attribute([_anomaly()])
+        assert fallback.last_provider == "stub"
+        assert fallback.current_provider == "stub"
+        assert isinstance(attr, Attribution)
+    finally:
+        gemini_mod.asyncio.sleep = orig_sleep
+
+
+def test_gemini_retry_delay_respects_retry_after() -> None:
+    from orbit.services.llm.gemini_client import _retry_delay
+
+    class MockResp:
+        headers = {"retry-after": "5"}
+
+    assert _retry_delay(MockResp(), 1) == 5.0
+
+    class NoHeaderResp:
+        headers = {}
+
+    assert _retry_delay(NoHeaderResp(), 3) == 8.0
+
+

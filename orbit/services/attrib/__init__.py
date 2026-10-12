@@ -149,13 +149,15 @@ class AttribService:
             )
             return
         if self._tracer is not None:
+            provider = getattr(self._llm, "last_provider", "stub")
             await self._tracer.emit(
                 "attrib_primary",
                 "info",
-                f"actor={primary.actor} confidence={primary.confidence:.2f}",
+                f"[{provider}] actor={primary.actor} confidence={primary.confidence:.2f}",
                 ref_id=primary.id,
                 actor=primary.actor,
                 confidence=primary.confidence,
+                provider=provider,
             )
 
         if not self._multi_agent:
@@ -173,14 +175,16 @@ class AttribService:
             else:
                 if self._tracer is not None:
                     alt = challenge.alternative_actor or "uncertainty floor"
+                    provider = getattr(self._llm, "last_provider", "stub")
                     await self._tracer.emit(
                         "attrib_redteam",
                         "warn" if challenge.confidence_delta < 0 else "info",
-                        f"challenge: {challenge.rationale}",
+                        f"[{provider}] challenge: {challenge.rationale}",
                         ref_id=primary.id,
                         alternative_actor=alt,
                         confidence_delta=challenge.confidence_delta,
                         objections=challenge.objections,
+                        provider=provider,
                     )
                 try:
                     attribution = await self._llm.reconcile(
@@ -216,13 +220,15 @@ class AttribService:
             len(attribution.source_signal_ids),
         )
         if self._tracer is not None:
+            provider = getattr(self._llm, "last_provider", "stub")
             await self._tracer.emit(
                 "attrib_reconcile",
                 "info",
-                f"final actor={attribution.actor} confidence={attribution.confidence:.2f}",
+                f"[{provider}] final actor={attribution.actor} confidence={attribution.confidence:.2f}",
                 ref_id=attribution.id,
                 actor=attribution.actor,
                 confidence=attribution.confidence,
+                provider=provider,
             )
 
     async def _apply_stress_haircut(

@@ -53,3 +53,9 @@ Verified audit of data pipelines, schemas, math engines, and clock domains acros
    - Default similarity threshold is `0.40` (`DEFAULT_SIMILARITY_THRESHOLD = 0.40` in `orbit/services/osint_cluster/__init__.py:55`).
 4. **Attribution Heuristics (Stub)**:
    - Primary attribution maps dominant anomaly kind using `_KIND_TO_ATTRIBUTION` in `orbit/services/llm/stub.py:36-450`, assigning Russia, China, Unknown, Iran, or Multi-actor.
+5. **LLM Provider, Cache & Quota Fallback**:
+   - Operational posture is **Gemini when quota allows, otherwise the stub**.
+   - Primary online model is `gemini-3.1-flash-lite` via `GeminiLLMClient`.
+   - On HTTP 429 rate limits or network errors, client retries with exponential backoff respecting `retry-after`, then falls back transparently to `StubLLMClient` via `FallbackLLMClient`.
+   - **Persistent Prompt-Hash Cache**: Implemented in `GeminiPromptCache` storing SHA256 hashes of `(model, prompt, temperature, thinking_budget, schema)` to `ORBIT_STATE_DIR/gemini_cache.json`. Cache hits bypass network calls.
+   - **Trace Telemetry**: Every attribution and decision trace explicitly carries provider provenance: `gemini`, `gemini-cache`, or `stub`.
