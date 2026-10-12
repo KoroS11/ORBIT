@@ -179,3 +179,67 @@ async def test_dispatch_emits_tools_trace():
     assert received[0].level == "tool"
     assert "routing.validate" in received[0].message
     assert received[0].ref_id == "dec-test"
+
+
+@pytest.mark.asyncio
+async def test_decide_enriches_local_decisions_with_tools():
+    from orbit.services.decide import DecideService
+    from orbit.services.llm.stub import StubLLMClient
+    from orbit.services.schemas.events import Attribution, Decision
+
+    bus = InProcessBus()
+    tracer = Tracer(bus)
+    ctx = _ctx(tracer=tracer)
+    tools = [
+        KBLookupTool(),
+        RoutingValidateTool(),
+    ]
+
+    decide_service = DecideService(
+        bus=bus,
+        llm=StubLLMClient(ctx.kb),
+        orbit=ctx.orbit,
+        tracer=tracer,
+        tools=tools,
+        tool_ctx=ctx,
+    )
+
+    traces: list[ReasoningTrace] = []
+
+    async def collect_traces():
+        async for _, event in bus.subscribe("traces.tools"):
+            if isinstance(event, ReasoningTrace):
+                traces.append(event)
+                if len(traces) == 2:
+                    break
+
+    collector = asyncio.create_task(collect_traces())
+    await asyncio.sleep(0)
+
+    decision = Decision(
+        attribution_id="att-1",
+        action="threat_warning",
+        authority="local",
+        target="Local defense node",
+        rationale="Local threat warning",
+    )
+    attribution = Attribution(
+        id="att-1",
+        anomaly_ids=["ano-1"],
+        actor="Ghost Lance",
+        confidence=0.85,
+        evidence=["Observed RF pulse"],
+        predicted_next=None,
+        kb_citations=["kb-threat"],
+        source_signal_ids=["sig-1"],
+    )
+
+    enriched = await decide_service._maybe_enrich_with_tools(decision, attribution)
+    assert enriched.authority == "local"
+    await asyncio.wait_for(collector, timeout=1.0)
+
+    assert len(traces) == 2
+    tool_names = [t.payload.get("tool") for t in traces]
+    assert "kb.lookup" in tool_names
+    assert "routing.validate" in tool_names
+

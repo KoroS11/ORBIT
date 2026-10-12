@@ -139,11 +139,34 @@ class DecideService:
         if self._tool_ctx is None or self._tools is None:
             return decision
         if decision.authority != "request":
-            return decision
+            return await self._apply_local_tools(decision, attribution)
         rpo = self._find_rpo_anomaly(attribution)
         if rpo is not None and self._orbit is not None and self._tool_ctx.orbit is not None:
             return await self._apply_maneuver_via_tools(decision, attribution, rpo)
         return await self._apply_generic_request_tools(decision, attribution)
+
+    async def _apply_local_tools(
+        self, decision: Decision, attribution: Attribution
+    ) -> Decision:
+        assert self._tool_ctx is not None and self._tools is not None
+        tool_by_name = {tool.name: tool for tool in self._tools}
+        kb_tool = tool_by_name.get("kb.lookup")
+        if kb_tool is not None:
+            await dispatch(
+                kb_tool,
+                {"actor": attribution.actor},
+                self._tool_ctx,
+                ref_id=decision.id,
+            )
+        routing_tool = tool_by_name.get("routing.validate")
+        if routing_tool is not None:
+            await dispatch(
+                routing_tool,
+                {"action": decision.action, "authority": decision.authority},
+                self._tool_ctx,
+                ref_id=decision.id,
+            )
+        return decision
 
     async def _apply_generic_request_tools(
         self, decision: Decision, attribution: Attribution
