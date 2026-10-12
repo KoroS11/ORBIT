@@ -51,6 +51,8 @@ export function useEngineSocket(): void {
   const ingestUIEvent = useEventStore((s) => s.ingestUIEvent);
   const ingestTrace = useEventStore((s) => s.ingestTrace);
   const setKB = useEventStore((s) => s.setKB);
+  const setDecisionReviews = useEventStore((s) => s.setDecisionReviews);
+  const reset = useEventStore((s) => s.reset);
 
   const failureCountRef = useRef(0);
   const fixtureTimerRef = useRef<number | null>(null);
@@ -142,6 +144,16 @@ export function useEngineSocket(): void {
               break;
             case "decision":
               ingestDecision(envelope.data as never);
+              break;
+            case "review": {
+              const rev = envelope.data;
+              if (rev && rev.decision_id) {
+                setDecisionReviews({ [rev.decision_id]: rev });
+              }
+              break;
+            }
+            case "reset":
+              reset();
               break;
             case "ui_event":
               ingestUIEvent(envelope.data as UIEvent);

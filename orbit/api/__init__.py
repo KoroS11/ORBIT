@@ -46,6 +46,7 @@ _FANOUT_PATTERNS: tuple[tuple[str, str], ...] = (
     ("ui_events.*", "ui_event"),
     ("traces.*", "trace"),
     ("embeddings.*", "embedding"),
+    ("reviews.*", "review"),
     ("system.*", "reset"),
 )
 
@@ -266,7 +267,7 @@ def create_app() -> FastAPI:
         if hasattr(app.state, "engine"):
             engine = app.state.engine
             await engine.bus.publish(
-                f"decisions.{status}",
+                f"reviews.{status}",
                 {
                     "type": "decision_review",
                     "decision_id": decision_id,

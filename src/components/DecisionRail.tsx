@@ -13,7 +13,8 @@ const ACTION_LABELS: Record<string, string> = {
   passive_defense: 'Passive defense',
 }
 
-function formatAction(action: string): string {
+function formatAction(action?: string): string {
+  if (!action) return 'Action'
   return (
     ACTION_LABELS[action] ??
     action
@@ -66,8 +67,13 @@ export function DecisionRail() {
   const setActiveTraceRefId = useEventStore((s) => s.setActiveTraceRefId)
   const traces = useEventStore((s) => s.traces)
 
+  const validDecisions = useMemo(
+    () => decisions.filter((d) => Boolean(d && d.id && d.action)),
+    [decisions],
+  )
+
   const needApprovalCount = useMemo(() => {
-    return decisions.filter((d) => {
+    return validDecisions.filter((d) => {
       if (d.authority !== 'request') return false
       const rev = decisionReviews[d.id]
       if (rev && (rev.status === 'approved' || rev.status === 'rejected')) {
@@ -75,7 +81,7 @@ export function DecisionRail() {
       }
       return !acceptedDecisionIds.has(d.id) && !deferredDecisionIds.has(d.id)
     }).length
-  }, [decisions, decisionReviews, acceptedDecisionIds, deferredDecisionIds])
+  }, [validDecisions, decisionReviews, acceptedDecisionIds, deferredDecisionIds])
 
   const handleViewTrace = (decision: Decision) => {
     setActiveTraceRefId(decision.id)
@@ -131,7 +137,7 @@ export function DecisionRail() {
       <div className="panel__header">
         <h2>Decision Rail</h2>
         <span>
-          {decisions.length} {decisions.length === 1 ? 'decision' : 'decisions'}
+          {validDecisions.length} {validDecisions.length === 1 ? 'decision' : 'decisions'}
           {needApprovalCount > 0 ? (
             <strong className="decision-rail__header-alert">
               {' '}· {needApprovalCount} needs approval
@@ -142,11 +148,11 @@ export function DecisionRail() {
         </span>
       </div>
 
-      {decisions.length === 0 ? (
+      {validDecisions.length === 0 ? (
         <p className="operator-shell__empty">No authority requests</p>
       ) : (
         <div className="decision-rail__list">
-          {decisions.map((d) => {
+          {validDecisions.map((d) => {
             const attribution =
               attributionsById[d.attribution_id] ??
               attributions.find((a) => a.id === d.attribution_id) ??

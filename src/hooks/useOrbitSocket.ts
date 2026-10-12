@@ -65,6 +65,13 @@ function normalizeMessage(value: unknown): OrbitMessage | null {
     kind?: unknown
     data?: unknown
   }
+  if (
+    candidate.data &&
+    typeof candidate.data === 'object' &&
+    (candidate.data as Record<string, unknown>).type === 'decision_review'
+  ) {
+    return { type: 'review', data: candidate.data as never }
+  }
   const discriminator =
     typeof candidate.type === 'string'
       ? candidate.type
@@ -82,6 +89,7 @@ function normalizeMessage(value: unknown): OrbitMessage | null {
       'trace',
       'embedding',
       'reset',
+      'review',
     ].includes(discriminator)
   ) {
     return null
@@ -107,6 +115,13 @@ function reduceMessage(
         uiEvents: [],
         traces: [],
       }
+    case 'review': {
+      const rev = message.data
+      if (rev && rev.decision_id) {
+        store.setDecisionReviews({ [rev.decision_id]: rev })
+      }
+      return state
+    }
     case 'signal':
       store.ingestSignal(message.data as Signal)
       return {
@@ -129,12 +144,17 @@ function reduceMessage(
           20,
         ),
       }
-    case 'decision':
-      store.ingestDecision(message.data as Decision)
+    case 'decision': {
+      const dec = message.data as Decision
+      if (!dec || !dec.id || !dec.action) {
+        return state
+      }
+      store.ingestDecision(dec)
       return {
         ...state,
-        decisions: prependLimited<Decision>(state.decisions, message.data as Decision, 20),
+        decisions: prependLimited<Decision>(state.decisions, dec, 20),
       }
+    }
     case 'ui_event':
       store.ingestUIEvent(message.data as UIEvent)
       return {

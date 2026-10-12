@@ -182,7 +182,8 @@ export function Brigade() {
   const latestAttribution =
     socketState.attributions[0] ?? (beatIndex >= 4 ? beatAttribution : null)
   const latestDecision =
-    socketState.decisions[0] ?? (beatIndex >= 5 ? beatDecision : null)
+    socketState.decisions.find((d) => Boolean(d && d.id && d.action)) ??
+    (beatIndex >= 5 ? beatDecision : null)
   const latestUiEvent = socketState.uiEvents[0] ?? null
   const approvalEvent = pendingApproval ?? latestUiEvent
   const hasApprovalRequest =

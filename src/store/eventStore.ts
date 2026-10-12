@@ -225,11 +225,25 @@ export const useEventStore = create<EventState>()(
       },
     })),
 
-  ingestDecision: (decision) =>
+  ingestDecision: (decision) => {
+    if (!decision || !decision.id || !decision.action) {
+      const candidate = decision as unknown as DecisionReview & { type?: string }
+      if (
+        candidate &&
+        candidate.decision_id &&
+        (candidate.status === "approved" || candidate.status === "rejected")
+      ) {
+        useEventStore
+          .getState()
+          .setDecisionReviews({ [candidate.decision_id]: candidate });
+      }
+      return;
+    }
     set((state) => ({
       decisions: pushBounded(state.decisions, decision),
       decisionsById: { ...state.decisionsById, [decision.id]: decision },
-    })),
+    }));
+  },
 
   ingestTrace: (trace) =>
     set((state) => ({

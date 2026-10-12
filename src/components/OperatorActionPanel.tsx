@@ -28,19 +28,25 @@ const actionToDemoType = (action: string): ManeuverDemo['demoType'] => {
   return 'evasion'
 }
 
-const formatAction = (action: string) =>
-  ACTION_LABELS[action] ??
-  action
-    .split(/[_\s]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+const formatAction = (action?: string) => {
+  if (!action) return 'Review pending'
+  return (
+    ACTION_LABELS[action] ??
+    action
+      .split(/[_\s]+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  )
+}
 
 /** Operator-facing review surface for the latest decide-stage output.
  *  Lives in the left rail under the scenario list. When the engine
  *  produces a Decision, the operator can ACCEPT (authorize the action)
  *  or DENY (refuse it). Status persists per-decision via Zustand. */
 export function OperatorActionPanel() {
-  const decision = useEventStore((s) => s.decisions[0] ?? null)
+  const decision = useEventStore(
+    (s) => s.decisions.find((d) => Boolean(d && d.id && d.action)) ?? null,
+  )
   const accepted = useEventStore((s) =>
     decision ? s.acceptedDecisionIds.has(decision.id) : false,
   )
@@ -56,7 +62,7 @@ export function OperatorActionPanel() {
   // space stays empty rather than carrying placeholder chrome — the
   // panel only takes screen real estate once it has something
   // actionable to show.
-  if (!decision) {
+  if (!decision || !decision.id || !decision.action) {
     return null
   }
 

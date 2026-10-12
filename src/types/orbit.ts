@@ -176,6 +176,7 @@ export type OrbitMessage =
   | { type: 'trace'; topic?: string; data: ReasoningTrace }
   | { type: 'embedding'; topic?: string; data: OsintEmbeddingSnapshot }
   | { type: 'reset'; topic?: string; data?: Record<string, unknown> }
+  | { type: 'review'; topic?: string; data: DecisionReview }
 
 export type OrbitSocketState = {
   signals: Signal[]
@@ -228,3 +229,5 @@ export type WSEnvelope =
   | { topic: string; kind: 'ui_event'; data: UIEvent }
   | { topic: string; kind: 'trace'; data: ReasoningTrace }
   | { topic: string; kind: 'embedding'; data: OsintEmbeddingSnapshot }
+  | { topic: string; kind: 'review'; data: DecisionReview }
+  | { topic: string; kind: 'reset'; data?: Record<string, unknown> }
