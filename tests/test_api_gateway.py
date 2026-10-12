@@ -23,6 +23,9 @@ def test_health(client: TestClient) -> None:
     assert "provider" in body
     assert body["provider"] in ("stub", "gemini", "anthropic", "ollama") or "stub fallback" in body["provider"]
     assert "stub_fallback_active" in body
+    assert "fallback_count" in body
+    assert "last_fallback_at" in body
+    assert "active_provider" in body
     assert body["kb_entries"] >= 5
 
 

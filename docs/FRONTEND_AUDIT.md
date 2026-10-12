@@ -14,6 +14,7 @@ Environment: Local Preview (`http://127.0.0.1:4173`) + Backend Stub (`http://127
 | **Fixed (FIXED)** | **3** |
 | **Removed / Unmounted (REMOVED)** | **3** |
 | **Failed (FAIL)** | **0** |
+| **Phase 3 Failure Modes & Edge Cases** | **8 (all NOT RUN)** |
 | **Pending Remote Verification** | **0** |
 
 ---
@@ -79,3 +80,18 @@ Environment: Local Preview (`http://127.0.0.1:4173`) + Backend Stub (`http://127
 - **Network Requests**: 
   - All local REST calls (`/health`, `/kb`, `/scenarios/.../replay`, `/decisions/.../review`, `/stress`) succeeded with HTTP 200 after CORS fix.
   - External MapLibre raster tile requests (`https://server.arcgisonline.com/...`) failed gracefully due to offline/mock sandbox network environment without crashing the map canvas or halting the application.
+
+---
+
+## 4. Phase 3 Failure Modes & Edge Cases (Status: NOT RUN)
+
+| Case ID | Scenario / Failure Mode | Scope / Condition | Status | Notes |
+| :--- | :--- | :--- | :---: | :--- |
+| `P3-FAIL-01` | Backend Down | REST `/health` and API endpoints offline on mount | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-FAIL-02` | WebSocket Drop | Mid-session socket disconnection & reconnect | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-FAIL-03` | Malformed WS Payload | Unparseable / corrupted JSON frame on event stream | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-FAIL-04` | HTTP 500 on Review | Backend returns 500 Internal Server Error on review | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-FAIL-05` | Double-Click Approve | Rapid consecutive clicks on Approve button | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-FAIL-06` | Keyboard Navigation | Tab index, focus rings, Enter/Space activation | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-VIEW-01` | Viewport: 1366x768 | Laptop display aspect ratio rendering | **NOT RUN** | Not executed in live browser test environment. |
+| `P3-VIEW-02` | Viewport: 1024 Width | Tablet / compact width breakpoint layout | **NOT RUN** | Not executed in live browser test environment. |

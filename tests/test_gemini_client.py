@@ -351,3 +351,262 @@ def test_gemini_retry_delay_respects_retry_after() -> None:
     assert _retry_delay(NoHeaderResp(), 3) == 8.0
 
 
+REAL_GOOGLE_DAILY_429 = {
+    "error": {
+        "code": 429,
+        "message": "Resource has been exhausted (e.g. check quota).",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                "violations": [
+                    {
+                        "subject": "project:1234567890",
+                        "description": "Quota exceeded for quota metric 'Queries' and limit 'QueriesPerDay' of service 'generativelanguage.googleapis.com'.",
+                    }
+                ],
+            },
+            {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                "reason": "RATE_LIMIT_EXCEEDED",
+                "domain": "googleapis.com",
+                "metadata": {
+                    "consumer": "projects/1234567890",
+                    "quota_limit": "GenerateContentRequestsPerDayPerProject",
+                    "quota_metric": "generativelanguage.googleapis.com/generate_content_requests",
+                    "service": "generativelanguage.googleapis.com",
+                },
+            },
+        ],
+    }
+}
+
+REAL_GOOGLE_PER_MINUTE_429 = {
+    "error": {
+        "code": 429,
+        "message": "Resource has been exhausted (e.g. check quota).",
+        "status": "RESOURCE_EXHAUSTED",
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                "violations": [
+                    {
+                        "subject": "project:1234567890",
+                        "description": "Quota exceeded for quota metric 'Queries' and limit 'QueriesPerMinute' of service 'generativelanguage.googleapis.com'.",
+                    }
+                ],
+            },
+            {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                "reason": "RATE_LIMIT_EXCEEDED",
+                "domain": "googleapis.com",
+                "metadata": {
+                    "consumer": "projects/1234567890",
+                    "quota_limit": "GenerateRequestsPerMinutePerProject",
+                    "quota_metric": "generativelanguage.googleapis.com/generate_content_requests",
+                    "service": "generativelanguage.googleapis.com",
+                },
+            },
+        ],
+    }
+}
+
+
+async def test_circuit_breaker_trips_on_daily_quota_and_skips_retries(monkeypatch) -> None:
+    """Daily quota exhaustion (RESOURCE_EXHAUSTED with PerDay quota ID) trips breaker without retries."""
+    sleep_calls: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    import orbit.services.llm.gemini_client as gemini_mod
+    monkeypatch.setattr(gemini_mod.asyncio, "sleep", _fake_sleep)
+
+    network_call_count = 0
+
+    class _DailyExhaustionTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal network_call_count
+            network_call_count += 1
+            return httpx.Response(429, json=REAL_GOOGLE_DAILY_429)
+
+    kb = _kb()
+    breaker = gemini_mod.GeminiCircuitBreaker(cooldown_minutes=10)
+    primary = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_DailyExhaustionTransport(),
+        circuit_breaker=breaker,
+    )
+    stub = StubLLMClient(kb)
+    fallback = FallbackLLMClient(primary, stub)
+
+    assert fallback.fallback_count == 0
+    assert fallback.last_fallback_at is None
+
+    # First call: receives 429 with PerDay in error.details
+    attr = await fallback.attribute([_anomaly()])
+    assert isinstance(attr, Attribution)
+    assert fallback.fallback_count == 1
+    assert fallback.last_fallback_at is not None
+    assert fallback.last_provider == "stub"
+    assert network_call_count == 1
+    # Crucial: 0 retries performed (no 2/4/8s sleep)
+    assert sleep_calls == []
+    assert breaker.is_open() is True
+
+    # Second call while breaker is open: should NOT make any network call
+    attr2 = await fallback.attribute([_anomaly()])
+    assert isinstance(attr2, Attribution)
+    assert fallback.fallback_count == 2
+    assert network_call_count == 1  # Still 1, network was bypassed
+
+
+async def test_circuit_breaker_resets_after_cooldown(monkeypatch) -> None:
+    """Circuit breaker resets after cooldown period and allows live requests again."""
+    import orbit.services.llm.gemini_client as gemini_mod
+
+    breaker = gemini_mod.GeminiCircuitBreaker(cooldown_minutes=5)
+    breaker.trip()
+    assert breaker.is_open() is True
+
+    # Advance fake monotonic time past 5 minutes (300 seconds)
+    real_time = gemini_mod.time.monotonic()
+    monkeypatch.setattr(gemini_mod.time, "monotonic", lambda: real_time + 301)
+
+    assert breaker.is_open() is False
+
+
+async def test_per_minute_429_keeps_backoff_and_does_not_trip_circuit_breaker(monkeypatch) -> None:
+    """Per-minute 429 retains exponential backoff and succeeds on retry without tripping breaker."""
+    sleep_calls: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    import orbit.services.llm.gemini_client as gemini_mod
+    monkeypatch.setattr(gemini_mod.asyncio, "sleep", _fake_sleep)
+
+    canned_payload = {
+        "actor": "Russia",
+        "confidence": 0.70,
+        "evidence": ["rate-limit recovery"],
+        "kb_citations": ["kb-rpo-ambiguity-001", "kb-attribution-uncertainty-001"],
+    }
+
+    call_count = 0
+
+    class _PerMinuteRateLimitTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(429, json=REAL_GOOGLE_PER_MINUTE_429)
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    kb = _kb()
+    breaker = gemini_mod.GeminiCircuitBreaker(cooldown_minutes=10)
+    primary = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_PerMinuteRateLimitTransport(),
+        circuit_breaker=breaker,
+    )
+
+    attr = await primary.attribute([_anomaly()])
+    assert attr.actor == "Russia"
+    assert call_count == 2
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == 2.0  # retry 1 in 2s
+    assert breaker.is_open() is False
+
+
+async def test_ambiguous_429_keeps_normal_retries_and_does_not_trip_circuit_breaker(monkeypatch) -> None:
+    """Ambiguous 429 without clear PerDay quota ID keeps normal retries and does NOT trip breaker."""
+    sleep_calls: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    import orbit.services.llm.gemini_client as gemini_mod
+    monkeypatch.setattr(gemini_mod.asyncio, "sleep", _fake_sleep)
+
+    canned_payload = {
+        "actor": "China",
+        "confidence": 0.75,
+        "evidence": ["ambiguous recovered"],
+        "kb_citations": ["kb-rpo-ambiguity-001", "kb-attribution-uncertainty-001"],
+    }
+
+    call_count = 0
+
+    class _Ambiguous429Transport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Ambiguous: no details, generic error message
+                return httpx.Response(
+                    429,
+                    json={
+                        "error": {
+                            "code": 429,
+                            "message": "Too many requests",
+                            "status": "RESOURCE_EXHAUSTED",
+                        }
+                    },
+                )
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    kb = _kb()
+    breaker = gemini_mod.GeminiCircuitBreaker(cooldown_minutes=10)
+    primary = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_Ambiguous429Transport(),
+        circuit_breaker=breaker,
+    )
+
+    attr = await primary.attribute([_anomaly()])
+    assert attr.actor == "China"
+    assert call_count == 2
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == 2.0
+    assert breaker.is_open() is False
+
+
+async def test_gemini_call_succeeded_log_emitted(caplog) -> None:
+    """Successful Gemini call logs INFO message with model and attempt."""
+    import logging
+
+    canned_payload = {
+        "actor": "China",
+        "confidence": 0.81,
+        "evidence": ["successful test"],
+        "kb_citations": ["kb-rpo-ambiguity-001", "kb-attribution-uncertainty-001"],
+    }
+
+    class _SuccessTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_SuccessTransport(),
+    )
+
+    with caplog.at_level(logging.INFO):
+        await client.attribute([_anomaly()])
+
+    assert any(
+        "gemini: call succeeded (model=gemini-3.1-flash-lite attempt=1)" in record.message
+        for record in caplog.records
+    )
+
+
+

@@ -197,8 +197,11 @@ Expected JSON response:
 {
   "status": "ok",
   "provider": "gemini",
-  "stub_fallback_active": false,
-  "llm": "GeminiLLMClient",
+  "stub_fallback_active": true,
+  "fallback_count": 0,
+  "last_fallback_at": null,
+  "active_provider": "gemini",
+  "llm": "FallbackLLMClient",
   "kb_entries": 16,
   "clients": 0,
   "osint_cluster": {
@@ -212,6 +215,8 @@ Expected JSON response:
   }
 }
 ```
+
+> **Note on Telemetry Semantics**: `stub_fallback_active: true` indicates that the `FallbackLLMClient` wrapper is attached at boot. `fallback_count` tracks the cumulative number of fallback events in this process (with `last_fallback_at` recording the ISO timestamp), and `active_provider` reports which provider answered last (`gemini`, `gemini-cache`, or `stub`).
 
 ---
 

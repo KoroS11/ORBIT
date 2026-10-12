@@ -8,6 +8,9 @@ interface HealthResponse {
   status: string
   provider?: string
   stub_fallback_active?: boolean
+  fallback_count?: number
+  last_fallback_at?: string | null
+  active_provider?: string
 }
 
 export function DataProvenanceBadge() {
@@ -15,17 +18,26 @@ export function DataProvenanceBadge() {
 
   useEffect(() => {
     const apiUrl = getApiBaseUrl()
-    fetch(`${apiUrl}/health`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: HealthResponse | null) => {
-        if (data?.provider) {
-          setProvider(data.provider)
-        }
-      })
-      .catch(() => {
-        // Default if offline
-        setProvider('stub')
-      })
+
+    const fetchHealth = () => {
+      fetch(`${apiUrl}/health`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: HealthResponse | null) => {
+          if (data?.active_provider) {
+            setProvider(data.active_provider)
+          } else if (data?.provider) {
+            setProvider(data.provider)
+          }
+        })
+        .catch(() => {
+          // Default if offline
+          setProvider('stub')
+        })
+    }
+
+    fetchHealth()
+    const intervalId = setInterval(fetchHealth, 30000)
+    return () => clearInterval(intervalId)
   }, [])
 
   return (

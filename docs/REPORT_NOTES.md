@@ -15,7 +15,7 @@ The CA3 Cloud Mini-Project Report is evaluated based on three primary criteria t
 | Rubric Component | Marks | Key Focus & Scope | Mapping to Sections in this Document | Required Evidence & Status |
 |---|---|---|---|---|
 | **Design, Setup and Configuration** | **2 Marks** | Architectural design, problem formulation, component relationships, resource sizing, environment configuration, and local verification. | **Sections 1, 2, 3, 6, 8** | • Architecture Mermaid diagram<br>• Docker Compose resource caps (`mem_limit: 1400m`)<br>• Environment configuration table<br>• Pre-downloaded ML model strategy (`MiniLM`) |
-| **Implementation and Cloud Deployment** | **3 Marks** | Working AWS deployment, clean step-by-step execution, domain DNS, reverse proxy TLS, memory safety, and service health. | **Sections 4, 7, 8, 10, 11, 12** | • Step 0 AWS instance launch & DuckDNS setup<br>• SSH access with `ORBIT-key.pem`<br>• 4 GiB swapfile & Docker installation<br>• `docker compose ps` & `docker stats` verification<br>• HTTPS endpoint curl & HSTS security headers<br>• *Pending*: Elastic IP association `[PENDING-HARSH]`<br>• *Pending*: Live SSL browser padlock screenshot `[PENDING-HARSH]` |
+| **Implementation and Cloud Deployment** | **3 Marks** | Working AWS deployment, clean step-by-step execution, domain DNS, reverse proxy TLS, memory safety, and service health. | **Sections 4, 7, 8, 10, 11, 12** | • Step 0 AWS instance launch & DuckDNS setup<br>• SSH access with `ORBIT-key.pem`<br>• 4 GiB swapfile & Docker installation<br>• `docker compose ps` & `docker stats` verification<br>• HTTPS endpoint curl & HSTS security headers<br>• Elastic IP association (`13.126.207.91`)<br>• *Pending*: Live SSL browser padlock screenshot `[PENDING-HARSH]` |
 | **Report Writing, Cloud Setup, CI/CD & Code Repo** | **5 Marks** | Clear narrative, thorough cloud setup walkthrough, complete CI/CD automation to GHCR, GitHub repository link, and deployment validation. | **Sections 9, 13, 14, 15, 16** | • Exact GitHub Actions workflow (`ci.yml`) breakdown<br>• Least-privilege GITHUB_TOKEN & container tags on GHCR<br>• Clear note on manual EC2 pull vs automated CD<br>• Public GitHub repository link<br>• 2-Minute evaluation demo script<br>• Report screenshot checklist (AWS console, billing, terminal, UI) |
 
 ### Suggested Report Outline (~70% Cloud Setup, Deployment & CI/CD)
@@ -35,7 +35,7 @@ The coursework report should be weighted heavily toward cloud infrastructure, co
    - Step 0 AWS Console launch: Ubuntu Server 24.04 LTS `x86_64`, 25 GiB gp3, Security Group (`orbit-sg`) port restrictions (Port 22 from admin IP only, Ports 80 & 443 open).
    - SSH key pair configuration (`ORBIT-key.pem` kept securely in WSL).
    - Host memory engineering: configuring a 4 GiB swapfile as a safety margin against memory exhaustion on a 2 GiB host.
-   - DuckDNS dynamic DNS setup (`orbit-d.duckdns.org`), nslookup resolution verification, and Elastic IP (*to be attached* `[PENDING-HARSH]`).
+   - DuckDNS dynamic DNS setup (`orbit-d.duckdns.org`), nslookup resolution verification, and Elastic IP association (`13.126.207.91` associated manually in `ap-south-1`).
 4. **Containerization & Cloud Service Deployment (25%)**:
    - Multi-stage Dockerfile design: lean Python 3.12-slim backend with CPU-only PyTorch and pre-downloaded `all-MiniLM-L6-v2` Sentence-Transformers weights.
    - Frontend multi-stage build: Node 22 Vite build $\to$ Caddy 2-alpine reverse proxy.
@@ -76,9 +76,9 @@ The following operational and deployment steps are queued for Harsh to execute o
 | **Containerization** | **Completed** | Multi-stage Dockerfiles for backend (Python 3.12-slim, CPU PyTorch, pre-downloaded MiniLM) and frontend (Caddy 2-alpine). |
 | **Compose Topology & Resource Caps** | **Completed** | `docker-compose.yml` with 1400 MiB memory limit, internal exposure, volume persistence, and automatic TLS. |
 | **GitHub Actions CI/CD to GHCR** | **Completed** | `.github/workflows/ci.yml` gates on tests/lint/build, builds `linux/amd64`, pushes to GHCR using least-privilege token. |
-| **AWS EC2 Production Host Setup** | **Completed** | AWS EC2 `t3.small` in Mumbai (`ap-south-1`), Ubuntu 24.04 LTS, 4 GiB swapfile, DuckDNS (`orbit-d.duckdns.org`). Elastic IP: *to be attached* `[PENDING-HARSH]`. |
+| **AWS EC2 Production Host Setup** | **Completed** | AWS EC2 `t3.small` in Mumbai (`ap-south-1`), Ubuntu 24.04 LTS, 4 GiB swapfile, DuckDNS (`orbit-d.duckdns.org`). Elastic IP `13.126.207.91` associated manually (no auto-updater daemon required). |
 | **Caddy Health-Check Container Fix** | **Pending Redeploy** `[PENDING-HARSH]` | Caddy container healthcheck fix tested and ready for EC2 container pull/restart. |
-| **Persistent Gemini Response Cache** | **Completed** | Disk cache implemented via `GeminiPromptCache` (`<ORBIT_STATE_DIR>/gemini_cache.json`). Provider tagged on traces (`gemini`, `gemini-cache`, `stub`). |
+| **Persistent Gemini Response Cache & Circuit Breaker** | **Completed** | Disk cache implemented via `GeminiPromptCache` (`<ORBIT_STATE_DIR>/gemini_cache.json`). Circuit breaker trips for 10m on daily quota exhaustion (`RESOURCE_EXHAUSTED`). Provider tagged on traces and `/health` (`active_provider`, `fallback_count`, `last_fallback_at`). |
 | **Live Domain HTTPS Verification** | **Pending Validation** `[PENDING-HARSH]` | `TODO (Harsh to confirm): Verify live SSL handshake at https://orbit-d.duckdns.org and capture browser padlock screenshot.` |
 | **First GHCR CI Push Run** | **Pending Validation** `[PENDING-HARSH]` | `TODO (Harsh to confirm): Verify green status of the first GitHub Actions build on GitHub and confirm package visibility settings on GHCR.` |
 | **Report Screen Captures** | **Pending** `[PENDING-HARSH]` | `TODO (Harsh to capture): Capture AWS console, security groups, terminal run, and UI panels listed in Section 14.` |
@@ -380,7 +380,7 @@ uv run python scripts/verify.py scenarios/army_multidomain_attack_chain.jsonl
 ```
 
 ### 7.2 Test Suite Verification Results
-The test suite consists of **121 automated test cases** across 21 test modules:
+The test suite consists of **126 automated test cases** across 22 test modules:
 ```
 ============================ 121 passed in 37.94s =============================
 ```
@@ -553,7 +553,7 @@ This section documents the exact cloud setup executed on AWS.
 - **Instance Type**: `t3.small` (2 vCPU, 2.0 GiB RAM) — selected to comply with the AWS Student Free Tier budget while providing sufficient compute for containerized inference.
 - **Storage**: 25 GiB gp3 root volume.
 - **Authentication**: SSH via key pair `ORBIT-key`, private key file `ORBIT-key.pem` stored in WSL (`~/.ssh/ORBIT-key.pem`).
-- **DNS / Domain**: Free dynamic DNS via DuckDNS (`orbit-d.duckdns.org`). Elastic IP: **to be attached** `[PENDING-HARSH]` (instance currently uses dynamic public IP until the allocated Elastic IP is associated).
+- **DNS / Domain**: Dynamic DNS via DuckDNS (`orbit-d.duckdns.org`) manually mapped to static AWS Elastic IP **`13.126.207.91`** in `ap-south-1` (no background dynamic IP updater daemon needed, as the Elastic IP is permanent).
 - **Security Group Configuration**:
   - Inbound Port `22` (SSH): Restrict to administrator's IP CIDR.
   - Inbound Port `80` (HTTP): Open to `0.0.0.0/0` (required for Let's Encrypt ACME challenge and HTTPS redirect).
@@ -576,16 +576,16 @@ This section documents the exact cloud setup executed on AWS.
      - Inbound Rule 1: SSH (Port `22`), Source: `My IP` (administrator CIDR only).
      - Inbound Rule 2: HTTP (Port `80`), Source: `Anywhere-IPv4` (`0.0.0.0/0`) for ACME challenges and HTTP $\to$ HTTPS redirects.
      - Inbound Rule 3: HTTPS (Port `443`), Source: `Anywhere-IPv4` (`0.0.0.0/0`) for live application traffic.
-2. **Elastic IP Allocation & Association** `[PENDING-HARSH]`:
-   - Allocate an AWS Elastic IP in `ap-south-1` and associate it with the newly created EC2 instance so the public IPv4 address remains static across reboots. *(Currently **to be attached** `[PENDING-HARSH]` — the instance currently operates on the dynamic public IP assigned at launch until confirmed).*
-3. **Configure DuckDNS Subdomain**:
+2. **Elastic IP Allocation & Association**:
+   - Allocated AWS Elastic IP **`13.126.207.91`** in `ap-south-1` and associated it with the EC2 instance so the public IPv4 address remains static across reboots.
+3. **Configure DuckDNS Subdomain (Manual Mapping)**:
    - Log into [DuckDNS](https://www.duckdns.org).
-   - Point the subdomain **`orbit-d`** (`orbit-d.duckdns.org`) to the instance's public IP (or Elastic IP once attached `[PENDING-HARSH]`).
+   - Point the subdomain **`orbit-d`** (`orbit-d.duckdns.org`) manually to Elastic IP `13.126.207.91`. (Because the Elastic IP is static, no dynamic cron or auto-updater daemon is required on the host).
    - Verify DNS resolution locally:
      ```bash
      nslookup orbit-d.duckdns.org
      ```
-     Ensure the returned IP matches the public IP of the EC2 instance.
+     Ensure the returned IP matches `13.126.207.91`.
 
 #### Step 1: Connect to the EC2 Host
 From your local WSL terminal:
@@ -708,8 +708,8 @@ docker compose up -d
 
 ### 11.2 Known Limitations (Honest Academic Disclosure)
 1. **Single Operator Context**: The current console is tailored for an operational demonstration; it lacks multi-user authentication (RBAC / JWT / OAuth) on the decision review endpoints.
-2. **Free-Tier Gemini Quota Limits & Cache Behavior** `[PENDING-HARSH]`: Google Gemini's free-tier limits are enforced per Google Cloud / AI Studio project with low per-minute (RPM) and daily (RPD) caps (check Google AI Studio for current quota values). During testing on the deployed server, rapid scenario requests returned HTTP 429 status codes, which caused the backend to fall back to the deterministic stub (`StubLLMClient`). A persistent disk/memory response cache and provider tag are planned `[PENDING-HARSH]` to prevent redundant API queries and stabilize live demos without quota starvation.
-3. **Single-Node Deployment**: The system runs on a single EC2 host without an Auto-Scaling Group (ASG) or multi-AZ load balancer, reflecting the prototype edge nature of the project. Elastic IP is *to be attached* `[PENDING-HARSH]`.
+2. **Free-Tier Gemini Quota Limits, Circuit Breaker & Cache Behavior**: Google Gemini free-tier limits are enforced per Google Cloud / AI Studio project with per-minute and daily quota caps. During testing, rapid scenario replays triggered HTTP 429 quota exhaustion, causing the backend to failover to `StubLLMClient`. A persistent disk cache (`GeminiPromptCache`) and circuit breaker (`GeminiCircuitBreaker`) were implemented to trip for 10 minutes on daily quota exhaustion (`RESOURCE_EXHAUSTED`) without retry delays, and serve cached responses on repeat runs with zero network queries.
+3. **Single-Node Deployment**: The system runs on a single EC2 host without an Auto-Scaling Group (ASG) or multi-AZ load balancer, reflecting the prototype edge nature of the project. Elastic IP is `13.126.207.91`.
 4. **WebSocket Fanout Broadcast**: Every connected client receives the full event firehose; domain filtering is executed client-side.
 
 ---
@@ -739,9 +739,14 @@ This section details real engineering obstacles encountered during development a
 - **Problem**: Development across Windows and Linux CI introduced CRLF/LF line-ending warnings and merge conflicts in `README.md` during rebase against remote commits.
 - **Solution**: Standardized `.gitignore`, configured non-interactive git rebase (`git -c core.editor=true rebase --continue`), and verified test execution natively on Windows using PowerShell.
 
-### 5. Gemini API Free-Tier Rate Limits (HTTP 429), Format Drift, and Planned Response Cache `[PENDING-HARSH]`
-- **Problem**: Google Gemini free-tier quotas are enforced per project with low per-minute and daily caps (check AI Studio for current values). High-speed scenario verification and multi-agent attribution loops on the deployed server returned HTTP 429 quota errors, and occasional LLM responses exhibited Markdown fence formatting drift.
-- **Solution**: Built [`FallbackLLMClient`](../orbit/services/llm/gemini_client.py) with exponential backoff retries, JSON regex fence stripping (`_extract_json`), and an automatic failover to `StubLLMClient` (`ORBIT_LLM_FALLBACK=1`) that preserves pipeline continuity without crashing the engine. In addition, persistent Gemini response caching with an active provider tag is queued for deployment `[PENDING-HARSH]` to ensure deterministic replays consume zero external API quota.
+### 5. Gemini API Free-Tier Rate Limits (HTTP 429), Circuit Breaker, Format Drift, and Response Caching
+- **Problem**: Google Gemini free-tier quotas are enforced per project with per-minute and daily caps. High-speed scenario verification and multi-agent attribution loops on the deployed server returned HTTP 429 quota errors, and occasional LLM responses exhibited Markdown fence formatting drift.
+- **Solution**:
+  1. Built [`FallbackLLMClient`](../orbit/services/llm/gemini_client.py) with exponential backoff retries, JSON regex fence stripping (`_extract_json`), and an automatic failover to `StubLLMClient` (`ORBIT_LLM_FALLBACK=1`) that preserves pipeline continuity without crashing the engine.
+  2. Implemented a **circuit breaker** (`GeminiCircuitBreaker`) that trips immediately upon daily quota exhaustion (`RESOURCE_EXHAUSTED`), skipping 2/4/8s delays and routing straight to the stub for a configurable cooldown (default 10 minutes).
+  3. Added persistent disk caching via `GeminiPromptCache` (`<ORBIT_STATE_DIR>/gemini_cache.json`) to serve warm scenario replays with 0 external API calls.
+  4. Clarified `/health` semantics: `stub_fallback_active` denotes wrapper presence, `fallback_count` and `last_fallback_at` track active failover events in the running process, and `active_provider` tracks the answering provider.
+  5. *Note on Model Switching Quota Buckets*: `deploy.env.example` sets `gemini-2.5-flash`, while the code default is `gemini-3.1-flash-lite`. Quotas are enforced per model and per project; check Google AI Studio for current quota limits. Both models are supported transparently behind `FallbackLLMClient`.
 
 ---
 
@@ -815,7 +820,7 @@ The teammate writing the report should collect the following deployed-system scr
 | Resource | URL / Location | Status / Notes |
 |---|---|---|
 | **GitHub Source Code Repository** | [https://github.com/KoroS11/ORBIT](https://github.com/KoroS11/ORBIT) | Public repository containing all application code, tests, and configurations. |
-| **Live Production Application** | `https://orbit-d.duckdns.org` | **Pending Live Verification** `[PENDING-HARSH]`: Confirm live accessibility, Elastic IP attachment (*to be attached*), and active TLS certificate. |
+| **Live Production Application** | `https://orbit-d.duckdns.org` | **Active** (Elastic IP `13.126.207.91` associated in `ap-south-1`, DuckDNS manually mapped). |
 | **Backend Container Package (GHCR)** | `ghcr.io/koros11/orbit-backend:latest` | Pre-built container image on GitHub Container Registry. |
 | **Frontend/Caddy Container (GHCR)** | `ghcr.io/koros11/orbit-frontend:latest` | Pre-built container image on GitHub Container Registry. |
 | **Production Deployment Runbook** | [`DEPLOYMENT.md`](DEPLOYMENT.md) | In-repo administrator deployment instructions. |
@@ -827,8 +832,8 @@ The teammate writing the report should collect the following deployed-system scr
 
 The following items cannot be verified automatically from the repository and must be checked or captured directly by Harsh:
 
-1. **Attach Elastic IP & Update DuckDNS** `[PENDING-HARSH]`:
-   - `[PENDING-HARSH] TODO (Harsh to confirm)`: Allocate an Elastic IP in `ap-south-1`, associate it with the EC2 instance (currently *to be attached*), update DuckDNS so `orbit-d.duckdns.org` maps to this static IP, and confirm that `https://orbit-d.duckdns.org` resolves cleanly with an active Let's Encrypt TLS certificate.
+1. **Elastic IP & DuckDNS Association**:
+   - Confirmed: Elastic IP `13.126.207.91` is allocated in `ap-south-1` and associated with the EC2 instance, and DuckDNS `orbit-d.duckdns.org` is manually pointed to `13.126.207.91` (no auto-updater daemon required).
 2. **Push Caddy Health-Check Fix & Redeploy** `[PENDING-HARSH]`:
    - `[PENDING-HARSH] TODO (Harsh to confirm)`: Push the Caddy container health-check fix to `main`, verify the GitHub Actions CI run succeeds, pull updated containers on EC2, and confirm healthy container status via `docker compose ps`.
 3. **Add Persistent Gemini Response Cache & Provider Tag** `[PENDING-HARSH]`:

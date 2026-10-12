@@ -166,11 +166,21 @@ def create_app() -> FastAPI:
         engine = getattr(app.state, "engine", None)
         provider = getattr(app.state, "provider", "stub")
         fallback_active = False
+        fallback_count = 0
+        last_fallback_at = None
+        active_provider = provider
+
         if engine and hasattr(engine, "llm"):
             from orbit.services.llm.gemini_client import FallbackLLMClient
 
             if isinstance(engine.llm, FallbackLLMClient):
                 fallback_active = True
+                fallback_count = int(getattr(engine.llm, "fallback_count", 0))
+                last_fallback_at = getattr(engine.llm, "last_fallback_at", None)
+                active_provider = getattr(engine.llm, "last_provider", provider)
+            else:
+                active_provider = getattr(engine.llm, "last_provider", provider)
+
         provider_str = provider
 
         osint = {
@@ -195,6 +205,9 @@ def create_app() -> FastAPI:
             "status": "ok",
             "provider": provider_str,
             "stub_fallback_active": fallback_active,
+            "fallback_count": fallback_count,
+            "last_fallback_at": last_fallback_at,
+            "active_provider": active_provider,
             "llm": engine.llm.__class__.__name__ if engine else None,
             "kb_entries": len(engine.kb) if engine else 0,
             "clients": len(getattr(app.state, "clients", ())),

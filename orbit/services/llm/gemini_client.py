@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -37,11 +38,121 @@ from orbit.services.schemas.events import (
 
 log = logging.getLogger(__name__)
 
+import time
+
 # Default model that provides fast responses without 429 quota exhaustion.
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 RETRY_STATUS = {429, 500, 503}
 MAX_ATTEMPTS = 4
+
+
+def _is_daily_quota_exhausted(resp: Any) -> bool:
+    """Classify daily quota exhaustion strictly by quota ID in error.details.
+
+    Matches PerDay vs PerMinute (case-insensitive, matching 'perday'/'perminute'
+    with or without spaces/underscores/hyphens).
+    If ambiguous (neither found, both found, or error.details missing), returns False
+    so normal retries are preserved without tripping the circuit breaker.
+    """
+    try:
+        data = resp.json() if hasattr(resp, "json") else {}
+        if not isinstance(data, dict):
+            return False
+        err = data.get("error")
+        if not isinstance(err, dict):
+            return False
+        details = err.get("details")
+        if not isinstance(details, list) or not details:
+            return False
+
+        quota_tokens: list[str] = []
+        for item in details:
+            if isinstance(item, dict):
+                # Inspect ErrorInfo metadata (e.g. quota_limit: 'GenerateContentRequestsPerDayPerProject')
+                meta = item.get("metadata")
+                if isinstance(meta, dict):
+                    for v in meta.values():
+                        if isinstance(v, str):
+                            quota_tokens.append(v)
+                # Inspect QuotaFailure violations (e.g. description: '... limit QueriesPerDay ...', quotaId)
+                violations = item.get("violations")
+                if isinstance(violations, list):
+                    for v in violations:
+                        if isinstance(v, dict):
+                            desc = v.get("description")
+                            if isinstance(desc, str):
+                                quota_tokens.append(desc)
+                            quota_id = v.get("quotaId") or v.get("quota_id")
+                            if isinstance(quota_id, str):
+                                quota_tokens.append(quota_id)
+                # Direct quota ID fields in detail item
+                for key in ("quotaId", "quota_id", "quotaLimit", "quota_limit"):
+                    val = item.get(key)
+                    if isinstance(val, str):
+                        quota_tokens.append(val)
+            elif isinstance(item, str):
+                quota_tokens.append(item)
+
+        if not quota_tokens:
+            return False
+
+        # Normalize tokens: lowercase, strip all spaces, underscores, hyphens
+        normalized_str = re.sub(r"[\s_\-]+", "", " ".join(quota_tokens)).lower()
+
+        has_per_day = "perday" in normalized_str
+        has_per_minute = "perminute" in normalized_str
+
+        # If daily quota is present and per-minute is NOT present -> daily exhaustion
+        if has_per_day and not has_per_minute:
+            return True
+        # If per-minute is present, or both are present, or neither -> ambiguous or transient
+        return False
+    except Exception:
+        return False
+
+
+class GeminiCircuitBreaker:
+    """Circuit breaker for Gemini daily quota exhaustion (RESOURCE_EXHAUSTED)."""
+
+    def __init__(self, cooldown_minutes: float | None = None) -> None:
+        self._cooldown_minutes = cooldown_minutes
+        self._tripped_until: float = 0.0
+        self._was_tripped: bool = False
+
+    @property
+    def cooldown_s(self) -> float:
+        if self._cooldown_minutes is not None:
+            return self._cooldown_minutes * 60.0
+        raw = os.environ.get("ORBIT_GEMINI_CIRCUIT_BREAKER_MINUTES")
+        try:
+            minutes = float(raw) if raw is not None and raw.strip() != "" else 10.0
+        except ValueError:
+            minutes = 10.0
+        return minutes * 60.0
+
+    def is_open(self) -> bool:
+        now = time.monotonic()
+        if now < self._tripped_until:
+            return True
+        if self._was_tripped:
+            log.info("gemini: circuit breaker reset after cooldown; attempting live request")
+            self._was_tripped = False
+            self._tripped_until = 0.0
+        return False
+
+    def trip(self) -> None:
+        cooldown = self.cooldown_s
+        self._tripped_until = time.monotonic() + cooldown
+        self._was_tripped = True
+        log.warning(
+            "gemini: daily quota exhausted (RESOURCE_EXHAUSTED); circuit breaker tripped for %.1f minutes",
+            cooldown / 60.0,
+        )
+
+    def reset(self) -> None:
+        self._tripped_until = 0.0
+        self._was_tripped = False
 
 
 def _get_cache_file() -> Path:
@@ -144,6 +255,7 @@ class GeminiLLMClient(OllamaLLMClient):
         thinking_budget: int | None = None,
         transport: Any | None = None,
         cache: GeminiPromptCache | None = None,
+        circuit_breaker: GeminiCircuitBreaker | None = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
         self._kb = kb
@@ -173,6 +285,9 @@ class GeminiLLMClient(OllamaLLMClient):
         )
         self._transport = transport
         self._cache = cache if cache is not None else GeminiPromptCache()
+        self._circuit_breaker = (
+            circuit_breaker if circuit_breaker is not None else GeminiCircuitBreaker()
+        )
         self.last_provider: str = "gemini"
         log.info(
             "gemini: model=%s timeout=%.0fs thinking_budget=%s",
@@ -183,6 +298,10 @@ class GeminiLLMClient(OllamaLLMClient):
 
     async def _chat(self, *, system: str, user: str, schema: dict[str, Any]) -> dict:
         import httpx
+
+        if self._circuit_breaker.is_open():
+            log.warning("gemini: circuit breaker is open; skipping API call")
+            raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
 
         prompt = (
             f"{user}\n\n"
@@ -224,6 +343,10 @@ class GeminiLLMClient(OllamaLLMClient):
         async with httpx.AsyncClient(**client_kwargs) as client:
             for attempt in range(1, MAX_ATTEMPTS + 1):
                 resp = await client.post(url, json=body, headers=headers)
+                if resp.status_code == 429 and _is_daily_quota_exhausted(resp):
+                    self._circuit_breaker.trip()
+                    resp.raise_for_status()
+
                 if resp.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS:
                     delay = _retry_delay(resp, attempt)
                     log.warning(
@@ -238,6 +361,7 @@ class GeminiLLMClient(OllamaLLMClient):
                 parsed = _extract_json(_response_text(resp.json()))
                 self._cache.set(cache_key, parsed)
                 self.last_provider = "gemini"
+                log.info("gemini: call succeeded (model=%s attempt=%d)", self._model, attempt)
                 return parsed
         raise RuntimeError("gemini: retries exhausted")
 
@@ -270,6 +394,8 @@ class FallbackLLMClient:
         self._primary = primary
         self._fallback = fallback
         self.last_provider: str = getattr(primary, "last_provider", "gemini")
+        self.fallback_count: int = 0
+        self.last_fallback_at: str | None = None
 
     @property
     def current_provider(self) -> str:
@@ -287,6 +413,10 @@ class FallbackLLMClient:
                 type(exc).__name__,
                 exc,
             )
+            self.fallback_count += 1
+            from datetime import datetime, timezone
+
+            self.last_fallback_at = datetime.now(timezone.utc).isoformat()
             self.last_provider = "stub"
             return await getattr(self._fallback, name)(*args)
 
