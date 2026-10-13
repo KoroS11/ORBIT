@@ -26,7 +26,30 @@ def test_health(client: TestClient) -> None:
     assert "fallback_count" in body
     assert "last_fallback_at" in body
     assert "active_provider" in body
+    assert "cache_hits" in body
+    assert "seed_hits" in body
+    assert "live_calls" in body
+    assert "stub_fallbacks" in body
     assert body["kb_entries"] >= 5
+
+
+def test_health_counters_reflected(client: TestClient) -> None:
+    engine = app.state.engine
+    orig_cache_hits = getattr(engine.llm, "cache_hits", 0)
+    try:
+        setattr(engine.llm, "cache_hits", 42)
+        setattr(engine.llm, "seed_hits", 17)
+        setattr(engine.llm, "live_calls", 5)
+        setattr(engine.llm, "stub_fallbacks", 2)
+        response = client.get("/health")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["cache_hits"] == 42
+        assert body["seed_hits"] == 17
+        assert body["live_calls"] == 5
+        assert body["stub_fallbacks"] == 2
+    finally:
+        setattr(engine.llm, "cache_hits", orig_cache_hits)
 
 
 def test_list_scenarios(client: TestClient) -> None:

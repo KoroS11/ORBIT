@@ -11,10 +11,15 @@ interface HealthResponse {
   fallback_count?: number
   last_fallback_at?: string | null
   active_provider?: string
+  cache_hits?: number
+  seed_hits?: number
+  live_calls?: number
+  stub_fallbacks?: number
 }
 
 export function DataProvenanceBadge() {
   const [provider, setProvider] = useState<string>('stub')
+  const [telemetry, setTelemetry] = useState<HealthResponse | null>(null)
 
   useEffect(() => {
     const apiUrl = getApiBaseUrl()
@@ -23,10 +28,13 @@ export function DataProvenanceBadge() {
       fetch(`${apiUrl}/health`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data: HealthResponse | null) => {
-          if (data?.active_provider) {
-            setProvider(data.active_provider)
-          } else if (data?.provider) {
-            setProvider(data.provider)
+          if (data) {
+            setTelemetry(data)
+            if (data.active_provider) {
+              setProvider(data.active_provider)
+            } else if (data.provider) {
+              setProvider(data.provider)
+            }
           }
         })
         .catch(() => {
@@ -40,14 +48,40 @@ export function DataProvenanceBadge() {
     return () => clearInterval(intervalId)
   }, [])
 
+  const hasCounters =
+    telemetry !== null &&
+    (telemetry.cache_hits !== undefined ||
+      telemetry.seed_hits !== undefined ||
+      telemetry.live_calls !== undefined ||
+      telemetry.stub_fallbacks !== undefined)
+
+  const breakdownText = hasCounters
+    ? `cache:${telemetry?.cache_hits ?? 0} seed:${telemetry?.seed_hits ?? 0} live:${telemetry?.live_calls ?? 0} stub:${telemetry?.stub_fallbacks ?? 0}`
+    : ''
+
+  const fullTooltip = breakdownText
+    ? `${TOOLTIP_TEXT} (LLM Calls: ${breakdownText})`
+    : TOOLTIP_TEXT
+
   return (
     <div
       className="data-provenance-badge"
-      title={TOOLTIP_TEXT}
-      aria-label={TOOLTIP_TEXT}
+      title={fullTooltip}
+      aria-label={fullTooltip}
     >
       <span className="data-provenance-badge__dot" />
       <span className="data-provenance-badge__provider">{provider}</span>
+      {hasCounters && (
+        <>
+          <span className="data-provenance-badge__divider">|</span>
+          <span
+            className="data-provenance-badge__breakdown"
+            style={{ color: '#94a3b8', fontSize: '0.74rem' }}
+          >
+            {breakdownText}
+          </span>
+        </>
+      )}
       <span className="data-provenance-badge__divider">|</span>
       <span className="data-provenance-badge__synthetic">
         SYNTHETIC SCENARIO DATA
