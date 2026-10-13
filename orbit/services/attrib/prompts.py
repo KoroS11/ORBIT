@@ -271,7 +271,9 @@ def attribution_user_prompt(
     anomalies: list[Anomaly], kb_entries: Iterable[KBEntry]
 ) -> str:
     anomalies_blob = json.dumps(
-        [a.model_dump(mode="json") for a in anomalies], indent=2, default=str
+        [a.model_dump(mode="json", exclude={"id", "ts"}) for a in anomalies],
+        indent=2,
+        default=str,
     )
     kb_blob = json.dumps(
         [e.model_dump(mode="json") for e in kb_entries], indent=2, default=str
@@ -378,9 +380,14 @@ def redteam_user_prompt(
     anomalies: list[Anomaly],
     kb_entries: Iterable[KBEntry],
 ) -> str:
-    primary_blob = json.dumps(primary.model_dump(mode="json"), indent=2, default=str)
+    primary_dict = primary.model_dump(
+        mode="json", exclude={"id", "ts", "anomaly_ids"}
+    )
+    primary_blob = json.dumps(primary_dict, indent=2, default=str)
     anomalies_blob = json.dumps(
-        [a.model_dump(mode="json") for a in anomalies], indent=2, default=str
+        [a.model_dump(mode="json", exclude={"id", "ts"}) for a in anomalies],
+        indent=2,
+        default=str,
     )
     kb_blob = json.dumps(
         [e.model_dump(mode="json") for e in kb_entries], indent=2, default=str
@@ -434,12 +441,18 @@ def reconcile_user_prompt(
     anomalies: list[Anomaly],
     kb_entries: Iterable[KBEntry],
 ) -> str:
-    primary_blob = json.dumps(primary.model_dump(mode="json"), indent=2, default=str)
-    challenge_blob = json.dumps(
-        challenge.model_dump(mode="json"), indent=2, default=str
+    primary_dict = primary.model_dump(
+        mode="json", exclude={"id", "ts", "anomaly_ids"}
     )
+    primary_blob = json.dumps(primary_dict, indent=2, default=str)
+    challenge_dict = challenge.model_dump(
+        mode="json", exclude={"id", "ts", "primary_attribution_id"}
+    )
+    challenge_blob = json.dumps(challenge_dict, indent=2, default=str)
     anomalies_blob = json.dumps(
-        [a.model_dump(mode="json") for a in anomalies], indent=2, default=str
+        [a.model_dump(mode="json", exclude={"id", "ts"}) for a in anomalies],
+        indent=2,
+        default=str,
     )
     kb_blob = json.dumps(
         [e.model_dump(mode="json") for e in kb_entries], indent=2, default=str

@@ -371,7 +371,10 @@ class GeminiLLMClient(OllamaLLMClient):
             "generationConfig": gen_config,
         }
         url = f"{API_ROOT}/models/{self._model}:generateContent"
-        headers = {"x-goog-api-key": self._api_key}  # header, so it never lands in URLs/logs
+        headers = {
+            "x-goog-api-key": self._api_key,  # header, so it never lands in URLs/logs
+            "x-orbit-call": effective_call,
+        }
         client_kwargs: dict[str, Any] = {"timeout": self._timeout_s}
         if self._transport is not None:
             client_kwargs["transport"] = self._transport

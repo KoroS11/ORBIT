@@ -130,3 +130,98 @@ async def test_attrib_publishes_only_final_attribution():
     final = received[0]
     # Reconciliation adds a "Red-team review" line to evidence.
     assert any("Red-team" in line for line in final.evidence)
+
+
+def test_prompts_are_deterministic_without_volatile_fields():
+    """Verify redteam, reconcile, and decide prompts drop volatile id and ts fields."""
+    import uuid
+    from datetime import datetime, timezone
+    from orbit.services.attrib.prompts import (
+        attribution_user_prompt,
+        redteam_user_prompt,
+        reconcile_user_prompt,
+    )
+    from orbit.services.decide.prompts import decision_user_prompt
+
+    kb = KB.load_from_json(KB_FILE)
+    entries = kb.all_entries()[:2]
+
+    # Two anomalies with different IDs and timestamps
+    a1 = _anomaly("orbital_rpo_risk")
+    a1.id = f"anom-{uuid.uuid4().hex}"
+    a1.ts = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+
+    a2 = _anomaly("orbital_rpo_risk")
+    a2.id = f"anom-{uuid.uuid4().hex}"
+    a2.ts = datetime(2026, 2, 2, 12, 30, 0, tzinfo=timezone.utc)
+
+    # 1. Primary prompt
+    p1 = attribution_user_prompt([a1], entries)
+    p2 = attribution_user_prompt([a2], entries)
+    assert p1 == p2
+    assert a1.id not in p1
+    assert a2.id not in p2
+
+    # Two primary attributions with different IDs and timestamps
+    prim1 = Attribution(
+        id=f"attr-{uuid.uuid4().hex}",
+        ts=datetime(2026, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+        anomaly_ids=[a1.id],
+        actor="China / PLA SSF",
+        confidence=0.75,
+        doctrine_match="kb-rpo-ambiguity-001",
+        evidence=["test evidence"],
+        kb_citations=["kb-rpo-ambiguity-001"],
+    )
+    prim2 = Attribution(
+        id=f"attr-{uuid.uuid4().hex}",
+        ts=datetime(2026, 2, 2, 12, 35, 0, tzinfo=timezone.utc),
+        anomaly_ids=[a2.id],
+        actor="China / PLA SSF",
+        confidence=0.75,
+        doctrine_match="kb-rpo-ambiguity-001",
+        evidence=["test evidence"],
+        kb_citations=["kb-rpo-ambiguity-001"],
+    )
+
+    # 2. Redteam prompt
+    rt1 = redteam_user_prompt(prim1, [a1], entries)
+    rt2 = redteam_user_prompt(prim2, [a2], entries)
+    assert rt1 == rt2
+    assert prim1.id not in rt1
+    assert prim2.id not in rt2
+
+    # Two challenges with different IDs and timestamps
+    chal1 = AttributionChallenge(
+        id=f"chal-{uuid.uuid4().hex}",
+        ts=datetime(2026, 1, 1, 10, 6, 0, tzinfo=timezone.utc),
+        primary_attribution_id=prim1.id,
+        alternative_actor="Russia",
+        confidence_delta=-0.1,
+        objections=["test objection"],
+        rationale="test challenge rationale",
+    )
+    chal2 = AttributionChallenge(
+        id=f"chal-{uuid.uuid4().hex}",
+        ts=datetime(2026, 2, 2, 12, 36, 0, tzinfo=timezone.utc),
+        primary_attribution_id=prim2.id,
+        alternative_actor="Russia",
+        confidence_delta=-0.1,
+        objections=["test objection"],
+        rationale="test challenge rationale",
+    )
+
+    # 3. Reconcile prompt
+    rec1 = reconcile_user_prompt(prim1, chal1, [a1], entries)
+    rec2 = reconcile_user_prompt(prim2, chal2, [a2], entries)
+    assert rec1 == rec2
+    assert chal1.id not in rec1
+    assert chal2.id not in rec2
+
+    # 4. Decide prompt
+    dec1 = decision_user_prompt(prim1)
+    dec2 = decision_user_prompt(prim2)
+    assert dec1 == dec2
+    assert prim1.id not in dec1
+    assert prim2.id not in dec2
+

@@ -1,6 +1,7 @@
 """Prompt scaffolds for the live Anthropic decision agent."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from orbit.services.schemas.events import Attribution
@@ -213,12 +214,16 @@ def decision_system_prompt() -> str:
 
 
 def decision_user_prompt(attribution: Attribution) -> str:
+    clean_attr = attribution.model_dump(
+        mode="json", exclude={"id", "ts", "anomaly_ids"}
+    )
+    attr_blob = json.dumps(clean_attr, indent=2, default=str)
     return (
         "## Attribution\n"
         "The following attribution has been produced by ORBIT's attribution agent. "
         "Your decision must be calibrated to the confidence score and evidence — "
         "do not recommend actions that exceed what the attribution supports.\n\n"
-        f"```json\n{attribution.model_dump_json(indent=2)}\n```\n\n"
+        f"```json\n{attr_blob}\n```\n\n"
 
         "## Pre-Submission Checklist — Verify Both Before Calling Tool\n"
         "[ ] If authority='local': request_packet is null AND rationale does "
