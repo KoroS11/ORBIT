@@ -889,6 +889,178 @@ def test_gemini_prompt_cache_reads_old_and_new_entry_formats(tmp_path: Path):
     assert entry["metadata"]["prompt_version"] == "v1"
 
 
+def test_gemini_seed_cache_model_independent_key():
+    """Seed cache key is model-independent: sha256(system + prompt + schema + PROMPT_VERSION)."""
+    from orbit.services.llm.gemini_client import PROMPT_VERSION, compute_seed_key
+
+    k1 = compute_seed_key(
+        system="system text",
+        prompt="user prompt text",
+        schema={"type": "object"},
+        prompt_version="v1",
+    )
+    k2 = compute_seed_key(
+        system="system text",
+        prompt="user prompt text",
+        schema={"type": "object"},
+        prompt_version="v1",
+    )
+    assert k1 == k2
+
+    # Different schema or prompt produces different key
+    k3 = compute_seed_key(
+        system="system text",
+        prompt="different prompt text",
+        schema={"type": "object"},
+        prompt_version="v1",
+    )
+    assert k1 != k3
+
+
+async def test_lookup_order_state_cache_seed_live_stub(tmp_path: Path):
+    """Lookup order strictly follows: state cache -> seed -> live -> stub."""
+    import json
+    from orbit.services.llm.gemini_client import (
+        FallbackLLMClient,
+        GeminiCircuitBreaker,
+        GeminiLLMClient,
+        GeminiPromptCache,
+        GeminiSeedCache,
+        compute_seed_key,
+    )
+    from orbit.services.llm.stub import StubLLMClient
+
+    # 1. Prepare isolated state cache and seed cache
+    state_file = tmp_path / "state_cache.json"
+    seed_file = tmp_path / "seed_cache.json"
+
+    state_cache = GeminiPromptCache(cache_file=state_file)
+    seed_data = {}
+    seed_file.write_text(json.dumps(seed_data), encoding="utf-8")
+    seed_cache = GeminiSeedCache(seed_file=seed_file)
+
+    network_calls = 0
+
+    class _MockTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal network_calls
+            network_calls += 1
+            return httpx.Response(200, json=_gemini_response({
+                "actor": "China",
+                "confidence": 0.8,
+                "evidence": ["live"],
+                "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+            }))
+
+    kb = _kb()
+    primary = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_MockTransport(),
+        cache=state_cache,
+        seed_cache=seed_cache,
+    )
+    fallback = FallbackLLMClient(primary, StubLLMClient(kb))
+
+    anomaly = _anomaly()
+
+    # Step 1: Miss both state and seed -> Live call succeeds
+    attr_live = await fallback.attribute([anomaly])
+    assert attr_live.actor == "China"
+    assert network_calls == 1
+    assert fallback.live_calls == 1
+    assert fallback.cache_hits == 0
+    assert fallback.seed_hits == 0
+    assert fallback.last_provider == "gemini"
+
+    # Step 2: Second call with identical input hits State Cache
+    attr_state = await fallback.attribute([anomaly])
+    assert attr_state.actor == "China"
+    assert network_calls == 1  # No additional network call
+    assert fallback.cache_hits == 1
+    assert fallback.seed_hits == 0
+    assert fallback.last_provider == "gemini-cache"
+
+    # Step 3: Clear state cache; populate seed cache with different prompt
+    state_cache._memory.clear()
+    state_cache._persist()
+
+    # Craft an entry in seed cache using compute_seed_key
+    from orbit.services.attrib.prompts import (
+        ATTRIBUTION_TOOL,
+        attribution_system_prompt,
+        attribution_user_prompt,
+    )
+    system = attribution_system_prompt()
+    schema = ATTRIBUTION_TOOL["input_schema"]
+    user = attribution_user_prompt([anomaly], primary._resolve_kb_context([anomaly], ()))
+    full_prompt = (
+        f"{user}\n\n"
+        "Reply with a single JSON object that conforms to this schema:\n"
+        f"```json\n{json.dumps(schema, indent=2)}\n```"
+    )
+    s_key = compute_seed_key(system=system, prompt=full_prompt, schema=schema)
+    seed_data[s_key] = {
+        "response": {
+            "actor": "Russia",
+            "confidence": 0.72,
+            "evidence": ["from seed"],
+            "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+        },
+        "metadata": {
+            "scenario": "beat47",
+            "stage": "attribute_primary",
+            "model": "gemini-3.1-flash-lite",
+            "recorded_at": "2026-10-13T12:00:00Z",
+            "prompt_version": "v1",
+        },
+    }
+    seed_file.write_text(json.dumps(seed_data), encoding="utf-8")
+    seed_cache._memory = seed_cache._load()
+
+    attr_seed = await fallback.attribute([anomaly])
+    assert attr_seed.actor == "Russia"
+    assert network_calls == 1  # No network call, hit seed cache
+    assert fallback.seed_hits == 1
+    assert fallback.last_provider == "gemini-seed"
+
+    # Step 4: Clear both state and seed, trip circuit breaker -> Falls back to Stub
+    state_cache._memory.clear()
+    seed_cache._memory.clear()
+    primary._circuit_breaker.trip()
+
+    attr_stub = await fallback.attribute([anomaly])
+    assert fallback.stub_fallbacks == 1
+    assert fallback.last_provider == "stub"
+    assert isinstance(attr_stub, Attribution)
+
+
+def test_seed_cache_file_safety_and_size():
+    """Verify data/seed/gemini_cache_seed.json is < 5MB and contains no API keys."""
+    import re
+    from pathlib import Path
+
+    seed_path = Path("data/seed/gemini_cache_seed.json")
+    assert seed_path.exists(), "data/seed/gemini_cache_seed.json must exist"
+
+    size_bytes = seed_path.stat().st_size
+    max_size = 5 * 1024 * 1024  # 5 MB
+    assert size_bytes < max_size, f"Seed cache size {size_bytes} exceeds 5 MB limit"
+
+    content = seed_path.read_text(encoding="utf-8")
+    # Scan for Google API key prefix (AIza...) or OpenAI/Anthropic secret keys
+    api_key_patterns = [
+        re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
+        re.compile(r"AIza[0-9A-Za-z\-_]+"),
+        re.compile(r"sk-[0-9A-Za-z\-_]{20,}"),
+    ]
+    for pattern in api_key_patterns:
+        matches = pattern.findall(content)
+        assert len(matches) == 0, f"Detected API key-like strings in seed cache: {matches}"
+
+
+
 
 
 

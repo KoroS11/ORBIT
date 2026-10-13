@@ -23,6 +23,8 @@ deploy.env
 data/kb.sqlite
 data/kb.sqlite-journal
 data/state/
+!data/seed/
+!data/seed/**
 data/decision_reviews.json
 
 # Node / Vite

@@ -36,6 +36,8 @@ docs/
 
 # Local runtime state
 data/state/
+!data/seed/
+!data/seed/**
 data/decision_reviews.json
 data/kb.sqlite
 data/kb.sqlite-journal

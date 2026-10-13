@@ -299,6 +299,66 @@ class GeminiPromptCache:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _get_seed_cache_file() -> Path:
+    env_path = os.environ.get("ORBIT_GEMINI_SEED_CACHE")
+    if env_path:
+        return Path(env_path)
+    return Path(__file__).resolve().parents[3] / "data" / "seed" / "gemini_cache_seed.json"
+
+
+def compute_seed_key(
+    *,
+    system: str,
+    prompt: str,
+    schema: dict[str, Any] | None = None,
+    prompt_version: str = PROMPT_VERSION,
+) -> str:
+    """Compute MODEL-INDEPENDENT seed cache key: sha256(system + prompt + schema + PROMPT_VERSION)."""
+    payload = {
+        "system": system,
+        "prompt": prompt,
+        "schema": schema,
+        "prompt_version": prompt_version,
+    }
+    raw = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+class GeminiSeedCache:
+    """Read-only seed cache loaded from data/seed/gemini_cache_seed.json."""
+
+    def __init__(self, seed_file: Path | None = None) -> None:
+        self._path = seed_file if seed_file is not None else _get_seed_cache_file()
+        self._memory: dict[str, Any] = self._load()
+
+    def _load(self) -> dict[str, Any]:
+        if self._path.exists():
+            try:
+                content = self._path.read_text(encoding="utf-8")
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    return data
+            except Exception as exc:
+                log.warning("Failed to load Gemini seed cache from %s: %s", self._path, exc)
+        return {}
+
+    def get(self, key: str) -> Any | None:
+        entry = self._memory.get(key)
+        if entry is None:
+            return None
+        # Unpack if stored in standard format with metadata
+        if isinstance(entry, dict) and "response" in entry and "metadata" in entry:
+            return entry["response"]
+        return entry
+
+    def get_entry(self, key: str) -> dict[str, Any] | None:
+        """Return raw seed entry including metadata."""
+        return self._memory.get(key)
+
+    def __len__(self) -> int:
+        return len(self._memory)
+
+
 def _retry_delay(resp: Any, attempt: int) -> float:
     try:
         if hasattr(resp, "headers") and "retry-after" in resp.headers:
@@ -337,7 +397,8 @@ class GeminiLLMClient(OllamaLLMClient):
         timeout_s: float | None = None,
         thinking_budget: int | None = None,
         transport: Any | None = None,
-        cache: GeminiPromptCache | None = None,
+        cache: GeminiPromptCache | None | bool = None,
+        seed_cache: GeminiSeedCache | None | bool = None,
         circuit_breaker: GeminiCircuitBreaker | None = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
@@ -373,17 +434,32 @@ class GeminiLLMClient(OllamaLLMClient):
             self._cache = cache
         else:
             self._cache = GeminiPromptCache()
+
+        if seed_cache is False:
+            self._seed_cache: GeminiSeedCache | None = None
+        elif seed_cache is not None:
+            self._seed_cache = seed_cache
+        else:
+            self._seed_cache = GeminiSeedCache()
+
         self._circuit_breaker = (
             circuit_breaker if circuit_breaker is not None else GeminiCircuitBreaker()
         )
         self.last_provider: str = "gemini"
         self._current_call_name: str = "chat"
+        self.cache_hits: int = 0
+        self.seed_hits: int = 0
+        self.live_calls: int = 0
         log.info(
             "gemini: model=%s timeout=%.0fs thinking_budget=%s",
             self._model,
             self._timeout_s,
             self._thinking_budget,
         )
+
+    @property
+    def stub_fallbacks(self) -> int:
+        return 0
 
     async def _chat(
         self,
@@ -402,6 +478,7 @@ class GeminiLLMClient(OllamaLLMClient):
             "Reply with a single JSON object that conforms to this schema:\n"
             f"```json\n{json.dumps(schema, indent=2)}\n```"
         )
+        # 1. State cache lookup (model-dependent key)
         cache_key = None
         if self._cache is not None:
             cache_key = self._cache.compute_key(
@@ -416,8 +493,24 @@ class GeminiLLMClient(OllamaLLMClient):
             if cached is not None:
                 log.info("gemini: cache hit for key %s (call=%s)", cache_key[:12], effective_call)
                 self.last_provider = "gemini-cache"
+                self.cache_hits += 1
                 return cached
 
+        # 2. Seed cache lookup (model-independent key)
+        if self._seed_cache is not None:
+            seed_key = compute_seed_key(
+                system=system,
+                prompt=prompt,
+                schema=schema,
+            )
+            seed_cached = self._seed_cache.get(seed_key)
+            if seed_cached is not None:
+                log.info("gemini: seed cache hit for key %s (call=%s)", seed_key[:12], effective_call)
+                self.last_provider = "gemini-seed"
+                self.seed_hits += 1
+                return seed_cached
+
+        # 3. Circuit breaker check
         if self._circuit_breaker.is_open():
             log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
             raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
@@ -513,6 +606,7 @@ class GeminiLLMClient(OllamaLLMClient):
                     }
                     self._cache.set(cache_key, parsed, metadata=meta)
                 self.last_provider = "gemini"
+                self.live_calls += 1
                 log.info(
                     "gemini: call succeeded (call=%s model=%s attempt=%d elapsed=%.2fs)",
                     effective_call,
@@ -572,6 +666,22 @@ class FallbackLLMClient:
         self.last_provider: str = getattr(primary, "last_provider", "gemini")
         self.fallback_count: int = 0
         self.last_fallback_at: str | None = None
+
+    @property
+    def cache_hits(self) -> int:
+        return getattr(self._primary, "cache_hits", 0)
+
+    @property
+    def seed_hits(self) -> int:
+        return getattr(self._primary, "seed_hits", 0)
+
+    @property
+    def live_calls(self) -> int:
+        return getattr(self._primary, "live_calls", 0)
+
+    @property
+    def stub_fallbacks(self) -> int:
+        return self.fallback_count
 
     @property
     def current_provider(self) -> str:
