@@ -126,10 +126,15 @@ ORBIT_LLM=gemini
 
 # Google Gemini API key and model settings
 GEMINI_API_KEY=AIzaSy...your-actual-api-key...
-ORBIT_GEMINI_MODEL=gemini-2.5-flash
+ORBIT_GEMINI_MODEL=gemini-3.1-flash-lite
 ORBIT_GEMINI_TIMEOUT_S=60
 ORBIT_GEMINI_THINKING_BUDGET=0
 ORBIT_LLM_FALLBACK=1
+
+# Quota notice (read from Google AI Studio on 13 Oct 2026 for this project):
+# - gemini-3.1-flash-lite: 15 RPM, 500 RPD
+# - gemini-2.5-flash: 5 RPM, 20 RPD (trips daily limit very quickly)
+# Check Google AI Studio (https://aistudio.google.com/) for your project's active rate limits.
 
 # Concurrency & Memory Controls for t3.small
 ORBIT_ATTRIB_WINDOW_S=2.0

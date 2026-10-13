@@ -746,7 +746,10 @@ This section details real engineering obstacles encountered during development a
   2. Implemented a **circuit breaker** (`GeminiCircuitBreaker`) that trips immediately upon daily quota exhaustion (`RESOURCE_EXHAUSTED`), skipping 2/4/8s delays and routing straight to the stub for a configurable cooldown (default 10 minutes).
   3. Added persistent disk caching via `GeminiPromptCache` (`<ORBIT_STATE_DIR>/gemini_cache.json`) to serve warm scenario replays with 0 external API calls.
   4. Clarified `/health` semantics: `stub_fallback_active` denotes wrapper presence, `fallback_count` and `last_fallback_at` track active failover events in the running process, and `active_provider` tracks the answering provider.
-  5. *Note on Model Switching Quota Buckets*: `deploy.env.example` sets `gemini-2.5-flash`, while the code default is `gemini-3.1-flash-lite`. Quotas are enforced per model and per project; check Google AI Studio for current quota limits. Both models are supported transparently behind `FallbackLLMClient`.
+  5. *Model Default & AI Studio Quota Limits*: `deploy.env.example` and code default to `gemini-3.1-flash-lite`. As read from Google AI Studio on 13 Oct 2026 for this project:
+     - `gemini-3.1-flash-lite`: **15 RPM, 500 RPD** (recommended production default).
+     - `gemini-2.5-flash`: **5 RPM, 20 RPD** (severely constrained on free tier; daily limit exhausted after only 20 calls).
+     Operators must check Google AI Studio (https://aistudio.google.com/) for their project's current rate limits. Both models are supported transparently behind `FallbackLLMClient`.
 
 ---
 
