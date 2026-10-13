@@ -243,3 +243,66 @@ async def test_decide_enriches_local_decisions_with_tools():
     assert "kb.lookup" in tool_names
     assert "routing.validate" in tool_names
 
+
+@pytest.mark.asyncio
+async def test_decide_service_signal_budget_timeout():
+    """Verify that DecideService enforces signal_budget_s around self._llm.decide."""
+    from orbit.services.decide import DecideService
+    from orbit.services.schemas.events import Attribution, Decision
+
+    bus = InProcessBus()
+
+    class HangingLLM:
+        async def decide(self, attribution: Attribution) -> Decision:
+            # Simulate a hanging LLM call exceeding the budget
+            await asyncio.sleep(5.0)
+            return Decision(
+                attribution_id=attribution.id,
+                action="threat_warning",
+                authority="local",
+                target="target-1",
+                rationale="late rationale",
+            )
+
+    decide_service = DecideService(
+        bus,
+        HangingLLM(),  # type: ignore
+        tools=[],
+        tool_ctx=None,
+        signal_budget_s=0.1,  # 100ms budget
+    )
+
+    published_decisions: list[Decision] = []
+
+    async def collect_decisions():
+        async for _, event in bus.subscribe("decisions.*"):
+            if isinstance(event, Decision):
+                published_decisions.append(event)
+
+    collector = asyncio.create_task(collect_decisions())
+    runner = asyncio.create_task(decide_service.run())
+    await asyncio.sleep(0.05)
+
+    # Publish an attribution
+    attr = Attribution(
+        id="att-test-timeout",
+        anomaly_ids=["ano-1"],
+        actor="Unknown",
+        confidence=0.5,
+        evidence=["Observed RF pulse"],
+        predicted_next=None,
+        kb_citations=[],
+        source_signal_ids=["sig-1"],
+    )
+    await bus.publish("attributions.batch", attr)
+
+    # Allow time for the 0.1s budget timeout to trigger
+    await asyncio.sleep(0.3)
+
+    runner.cancel()
+    collector.cancel()
+    await asyncio.gather(runner, collector, return_exceptions=True)
+
+    # Since the LLM hung and timed out at 0.1s, no decision was published
+    assert len(published_decisions) == 0
+

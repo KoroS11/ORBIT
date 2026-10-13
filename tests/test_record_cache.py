@@ -168,3 +168,35 @@ async def test_recorder_stops_cleanly_on_daily_quota_429(tmp_path: Path):
     saved = json.loads(seed_file.read_text(encoding="utf-8"))
     assert len(saved) == 2
     assert total_entries == 2
+
+
+@pytest.mark.asyncio
+async def test_recorder_dry_run_writes_nothing_to_disk(tmp_path: Path):
+    """Verify that --dry-run writes absolutely nothing to disk (no seed file, no state cache)."""
+    seed_file = tmp_path / "never_created_seed.json"
+    transport = MockRecordingTransport()
+
+    total_disk_entries, pass_counts, stage_stats = await run_recorder(
+        scenarios=["beat47"],
+        max_calls=50,
+        max_passes=3,
+        seed_file=seed_file,
+        dry_run=True,
+        speed=5.0,
+        window_s=2.0,
+        transport=transport,
+    )
+
+    # ZERO files written
+    assert not seed_file.exists()
+    assert list(tmp_path.iterdir()) == []
+    assert total_disk_entries == 0
+
+    # Closure simulation in memory: pass 1 discovers 20 missing, pass 2 verifies 0 new
+    assert pass_counts == [20, 0]
+
+    # Coverage stats unambiguous: expected=5, recorded=0, missing=5 per stage
+    beat_stats = stage_stats["beat47"]
+    assert beat_stats["attribute_primary"]["expected"] == 5
+    assert beat_stats["attribute_primary"]["recorded"] == 0
+    assert beat_stats["attribute_primary"]["missing"] == 5

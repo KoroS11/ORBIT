@@ -1064,6 +1064,32 @@ def test_seed_cache_file_safety_and_size():
         assert len(matches) == 0, f"Detected API key-like strings in seed cache: {matches}"
 
 
+def test_committed_seed_provenance_and_metadata():
+    """Verify that committed data/seed/gemini_cache_seed.json contains no mock entries
+    and that any present entry has valid recorded_at and model metadata."""
+    from pathlib import Path
+
+    seed_path = Path("data/seed/gemini_cache_seed.json")
+    assert seed_path.exists(), "data/seed/gemini_cache_seed.json must exist"
+
+    raw = seed_path.read_text(encoding="utf-8")
+    data = json.loads(raw)
+    assert isinstance(data, dict), "Seed cache root must be a JSON object"
+
+    for key, entry in data.items():
+        assert isinstance(entry, dict), f"Entry {key} must be a dict"
+        assert "response" in entry, f"Entry {key} missing 'response'"
+        assert "metadata" in entry, f"Entry {key} missing 'metadata'"
+        meta = entry["metadata"]
+        assert isinstance(meta, dict), f"Entry {key} metadata must be a dict"
+        assert "model" in meta and meta["model"], f"Entry {key} missing model metadata"
+        assert "recorded_at" in meta and meta["recorded_at"], f"Entry {key} missing recorded_at timestamp"
+        # Must not be marked as mock or test fixture
+        assert meta.get("mock") is not True, f"Entry {key} marked as mock"
+        assert "mock" not in str(meta.get("model", "")).lower(), f"Entry {key} has mock model"
+        assert meta.get("scenario") != "mock_scenario", f"Entry {key} has mock scenario"
+
+
 @pytest.mark.asyncio
 async def test_rate_limiter_immediate_capacity_and_queuing():
     """Verify 12 calls pass immediately and 13th waits when under max_queue_wait_s."""

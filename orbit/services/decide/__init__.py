@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -63,11 +64,20 @@ class DecideService:
         tools: list[DecisionTool] | None = None,
         tool_ctx: ToolContext | None = None,
         kb=None,
+        signal_budget_s: float | None = None,
     ) -> None:
         self._bus = bus
         self._llm = llm
         self._orbit = orbit
         self._tracer = tracer
+        raw_budget = (
+            signal_budget_s
+            if signal_budget_s is not None
+            else os.environ.get("ORBIT_LLM_SIGNAL_BUDGET_S")
+        )
+        self._signal_budget_s: float = (
+            float(raw_budget) if raw_budget is not None else 25.0
+        )
         # If the caller didn't pre-build a tool registry, build a minimal one
         # using the orbit service alone — that's enough for the maneuver
         # enrichment path used by the snapshot tests and direct callers that
@@ -107,7 +117,15 @@ class DecideService:
                 )
                 continue
             try:
-                decision = await self._llm.decide(event)
+                async with asyncio.timeout(self._signal_budget_s):
+                    decision = await self._llm.decide(event)
+            except TimeoutError:
+                log.warning(
+                    "decide: LLMClient.decide timed out after %.1fs (ORBIT_LLM_SIGNAL_BUDGET_S exceeded) for attribution=%s",
+                    self._signal_budget_s,
+                    event.id,
+                )
+                continue
             except Exception:
                 log.exception(
                     "decide: LLMClient.decide failed for attribution=%s", event.id
