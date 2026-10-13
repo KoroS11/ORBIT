@@ -744,5 +744,151 @@ async def test_breaker_open_returns_cached_answer_with_gemini_cache_provider(tmp
     assert fallback.last_provider == "gemini-cache"
 
 
+def test_gemini_prompt_cache_atomic_write_and_lock(tmp_path: Path):
+    """Cache persists atomically via temp file + replace and is thread-safe."""
+    import concurrent.futures
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "cache.json"
+    cache = GeminiPromptCache(cache_file=cache_file)
+
+    def _writer(i: int):
+        cache.set(f"key_{i}", {"val": i}, metadata={"idx": i})
+
+    # Run 20 concurrent thread writes
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(_writer, range(20)))
+
+    # Verify all 20 entries persisted
+    loaded = GeminiPromptCache(cache_file=cache_file)
+    for i in range(20):
+        assert loaded.get(f"key_{i}") == {"val": i}
+        assert loaded.get_entry(f"key_{i}")["metadata"]["idx"] == i
+
+    # Verify no dangling temp files remain in directory
+    tmps = list(tmp_path.glob("*.tmp.*"))
+    assert len(tmps) == 0
+
+
+def test_gemini_prompt_cache_corrupt_file_recovery_and_warning(tmp_path: Path, caplog):
+    """On load error, bad file is renamed to *.corrupt and a WARNING is logged."""
+    import logging
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text("{invalid json truncated", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        cache = GeminiPromptCache(cache_file=cache_file)
+
+    # Bad file renamed to cache.json.corrupt
+    corrupt_file = tmp_path / "cache.json.corrupt"
+    assert corrupt_file.exists()
+    assert corrupt_file.read_text(encoding="utf-8") == "{invalid json truncated"
+    # Original file no longer exists or was moved
+    assert not cache_file.exists()
+    # Cache started with empty dict
+    assert cache._memory == {}
+    # WARNING log was emitted
+    assert any("Corrupted Gemini cache at" in r.message for r in caplog.records)
+    assert any("renamed to" in r.message for r in caplog.records)
+
+
+def test_gemini_prompt_cache_non_dict_corrupt_file_recovery(tmp_path: Path, caplog):
+    """If cache file contains JSON list or scalar instead of dict, rename to *.corrupt."""
+    import logging
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text("[1, 2, 3]", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        cache = GeminiPromptCache(cache_file=cache_file)
+
+    corrupt_file = tmp_path / "cache.json.corrupt"
+    assert corrupt_file.exists()
+    assert cache._memory == {}
+    assert any("Corrupted Gemini cache at" in r.message for r in caplog.records)
+
+
+def test_gemini_prompt_cache_prompt_version_in_key():
+    """Cache key includes PROMPT_VERSION so bumps invalidate old keys."""
+    from orbit.services.llm.gemini_client import PROMPT_VERSION, GeminiPromptCache
+
+    cache = GeminiPromptCache(cache_file=Path("nonexistent.json"))
+    k1 = cache.compute_key(
+        model="gemini-3.1-flash-lite",
+        system="sys",
+        prompt="prompt",
+        prompt_version="v1",
+    )
+    k2 = cache.compute_key(
+        model="gemini-3.1-flash-lite",
+        system="sys",
+        prompt="prompt",
+        prompt_version="v2",
+    )
+    assert k1 != k2
+    # Default uses current PROMPT_VERSION constant
+    k_default = cache.compute_key(
+        model="gemini-3.1-flash-lite",
+        system="sys",
+        prompt="prompt",
+    )
+    assert k_default == k1 if PROMPT_VERSION == "v1" else k2
+
+
+def test_gemini_prompt_cache_reads_old_and_new_entry_formats(tmp_path: Path):
+    """Cache seamlessly reads old format (raw dict) and new format (with metadata)."""
+    import json
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "cache.json"
+    raw_data = {
+        "old_entry_key": {
+            "actor": "Russia",
+            "confidence": 0.65,
+            "evidence": ["legacy format"],
+        },
+        "new_entry_key": {
+            "response": {
+                "actor": "China",
+                "confidence": 0.85,
+                "evidence": ["new format"],
+            },
+            "metadata": {
+                "stage": "attribute_primary",
+                "model": "gemini-3.1-flash-lite",
+                "recorded_at": "2026-10-13T12:00:00Z",
+                "prompt_version": "v1",
+            },
+        },
+    }
+    cache_file.write_text(json.dumps(raw_data, indent=2), encoding="utf-8")
+
+    cache = GeminiPromptCache(cache_file=cache_file)
+
+    # Both return the response payload
+    old_res = cache.get("old_entry_key")
+    assert old_res == {
+        "actor": "Russia",
+        "confidence": 0.65,
+        "evidence": ["legacy format"],
+    }
+
+    new_res = cache.get("new_entry_key")
+    assert new_res == {
+        "actor": "China",
+        "confidence": 0.85,
+        "evidence": ["new format"],
+    }
+
+    # get_entry preserves full metadata for new format
+    entry = cache.get_entry("new_entry_key")
+    assert entry["metadata"]["stage"] == "attribute_primary"
+    assert entry["metadata"]["prompt_version"] == "v1"
+
+
+
 
 

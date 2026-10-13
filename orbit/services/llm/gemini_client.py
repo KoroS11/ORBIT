@@ -18,7 +18,10 @@ import json
 import logging
 import os
 import re
+import threading
+import uuid
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -181,6 +184,9 @@ class GeminiCircuitBreaker:
         self._was_tripped = False
 
 
+PROMPT_VERSION = "v1"
+
+
 def _get_cache_file() -> Path:
     state_dir = os.environ.get("ORBIT_STATE_DIR")
     if state_dir:
@@ -196,29 +202,78 @@ class GeminiPromptCache:
 
     def __init__(self, cache_file: Path | None = None) -> None:
         self._path = cache_file if cache_file is not None else _get_cache_file()
+        self._lock = threading.Lock()
         self._memory: dict[str, Any] = self._load()
 
     def _load(self) -> dict[str, Any]:
         if self._path.exists():
             try:
-                return json.loads(self._path.read_text(encoding="utf-8"))
-            except Exception:
-                log.warning("Failed to load Gemini cache from %s", self._path)
+                content = self._path.read_text(encoding="utf-8")
+                data = json.loads(content)
+                if not isinstance(data, dict):
+                    raise ValueError(f"Cache root must be a dict, got {type(data).__name__}")
+                return data
+            except Exception as exc:
+                corrupt_path = self._path.with_name(f"{self._path.name}.corrupt")
+                try:
+                    if self._path.exists():
+                        os.replace(self._path, corrupt_path)
+                except Exception as move_err:
+                    log.warning(
+                        "Failed to rename corrupt cache %s to %s: %s",
+                        self._path,
+                        corrupt_path,
+                        move_err,
+                    )
+                log.warning(
+                    "Corrupted Gemini cache at %s renamed to %s: %s (starting with empty cache)",
+                    self._path,
+                    corrupt_path,
+                    exc,
+                )
         return {}
 
     def _persist(self) -> None:
+        with self._lock:
+            self._persist_locked()
+
+    def _persist_locked(self) -> None:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(json.dumps(self._memory, indent=2), encoding="utf-8")
-        except Exception:
-            log.warning("Failed to persist Gemini cache to %s", self._path)
+            tmp_path = self._path.with_name(f"{self._path.name}.tmp.{uuid.uuid4().hex}")
+            tmp_path.write_text(
+                json.dumps(self._memory, indent=2, default=str), encoding="utf-8"
+            )
+            os.replace(tmp_path, self._path)
+        except Exception as exc:
+            log.warning("Failed to persist Gemini cache to %s: %s", self._path, exc)
 
     def get(self, key: str) -> Any | None:
-        return self._memory.get(key)
+        with self._lock:
+            entry = self._memory.get(key)
+        if entry is None:
+            return None
+        # Keep reading old entry format:
+        # Old format: entry is directly the response object/dict
+        # New format: entry is {"response": ..., "metadata": ...}
+        if isinstance(entry, dict) and "response" in entry and "metadata" in entry:
+            return entry["response"]
+        return entry
 
-    def set(self, key: str, value: Any) -> None:
-        self._memory[key] = value
-        self._persist()
+    def get_entry(self, key: str) -> dict[str, Any] | None:
+        """Return raw entry including metadata if present."""
+        with self._lock:
+            return self._memory.get(key)
+
+    def set(
+        self, key: str, value: Any, metadata: dict[str, Any] | None = None
+    ) -> None:
+        with self._lock:
+            if metadata is not None:
+                self._memory[key] = {"response": value, "metadata": metadata}
+            else:
+                self._memory[key] = value
+            self._persist_locked()
 
     def compute_key(
         self,
@@ -229,6 +284,7 @@ class GeminiPromptCache:
         temperature: float = 0.2,
         thinking_budget: int | None = None,
         schema: dict[str, Any] | None = None,
+        prompt_version: str = PROMPT_VERSION,
     ) -> str:
         payload = {
             "model": model,
@@ -237,6 +293,7 @@ class GeminiPromptCache:
             "temperature": temperature,
             "thinking_budget": thinking_budget,
             "schema": schema,
+            "prompt_version": prompt_version,
         }
         raw = json.dumps(payload, sort_keys=True, default=str)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -310,7 +367,12 @@ class GeminiLLMClient(OllamaLLMClient):
             else None
         )
         self._transport = transport
-        self._cache = cache if cache is not None else GeminiPromptCache()
+        if cache is False:
+            self._cache: GeminiPromptCache | None = None
+        elif cache is not None:
+            self._cache = cache
+        else:
+            self._cache = GeminiPromptCache()
         self._circuit_breaker = (
             circuit_breaker if circuit_breaker is not None else GeminiCircuitBreaker()
         )
@@ -340,19 +402,21 @@ class GeminiLLMClient(OllamaLLMClient):
             "Reply with a single JSON object that conforms to this schema:\n"
             f"```json\n{json.dumps(schema, indent=2)}\n```"
         )
-        cache_key = self._cache.compute_key(
-            model=self._model,
-            system=system,
-            prompt=prompt,
-            temperature=0.2,
-            thinking_budget=self._thinking_budget,
-            schema=schema,
-        )
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            log.info("gemini: cache hit for key %s (call=%s)", cache_key[:12], effective_call)
-            self.last_provider = "gemini-cache"
-            return cached
+        cache_key = None
+        if self._cache is not None:
+            cache_key = self._cache.compute_key(
+                model=self._model,
+                system=system,
+                prompt=prompt,
+                temperature=0.2,
+                thinking_budget=self._thinking_budget,
+                schema=schema,
+            )
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                log.info("gemini: cache hit for key %s (call=%s)", cache_key[:12], effective_call)
+                self.last_provider = "gemini-cache"
+                return cached
 
         if self._circuit_breaker.is_open():
             log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
@@ -431,7 +495,23 @@ class GeminiLLMClient(OllamaLLMClient):
                     continue
                 resp.raise_for_status()
                 parsed = _extract_json(_response_text(resp.json()))
-                self._cache.set(cache_key, parsed)
+                if self._cache is not None:
+                    if cache_key is None:
+                        cache_key = self._cache.compute_key(
+                            model=self._model,
+                            system=system,
+                            prompt=prompt,
+                            temperature=0.2,
+                            thinking_budget=self._thinking_budget,
+                            schema=schema,
+                        )
+                    meta = {
+                        "stage": effective_call,
+                        "model": self._model,
+                        "recorded_at": datetime.now(timezone.utc).isoformat(),
+                        "prompt_version": PROMPT_VERSION,
+                    }
+                    self._cache.set(cache_key, parsed, metadata=meta)
                 self.last_provider = "gemini"
                 log.info(
                     "gemini: call succeeded (call=%s model=%s attempt=%d elapsed=%.2fs)",
