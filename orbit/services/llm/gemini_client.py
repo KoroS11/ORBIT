@@ -112,6 +112,32 @@ def _is_daily_quota_exhausted(resp: Any) -> bool:
         return False
 
 
+def _extract_quota_ids(details: list[Any]) -> list[str]:
+    """Extract quota ID values and quota limits from Google error.details."""
+    quota_ids: list[str] = []
+    for item in details:
+        if isinstance(item, dict):
+            meta = item.get("metadata")
+            if isinstance(meta, dict):
+                for k, v in meta.items():
+                    if "quota" in k.lower() or "limit" in k.lower():
+                        quota_ids.append(f"{k}={v}")
+            violations = item.get("violations")
+            if isinstance(violations, list):
+                for v in violations:
+                    if isinstance(v, dict):
+                        qid = v.get("quotaId") or v.get("quota_id")
+                        if qid:
+                            quota_ids.append(str(qid))
+                        desc = v.get("description")
+                        if desc:
+                            quota_ids.append(str(desc))
+            for k in ("quotaId", "quota_id", "quotaLimit", "quota_limit"):
+                if k in item and isinstance(item[k], str):
+                    quota_ids.append(item[k])
+    return quota_ids
+
+
 class GeminiCircuitBreaker:
     """Circuit breaker for Gemini daily quota exhaustion (RESOURCE_EXHAUSTED)."""
 
@@ -289,6 +315,7 @@ class GeminiLLMClient(OllamaLLMClient):
             circuit_breaker if circuit_breaker is not None else GeminiCircuitBreaker()
         )
         self.last_provider: str = "gemini"
+        self._current_call_name: str = "chat"
         log.info(
             "gemini: model=%s timeout=%.0fs thinking_budget=%s",
             self._model,
@@ -296,11 +323,20 @@ class GeminiLLMClient(OllamaLLMClient):
             self._thinking_budget,
         )
 
-    async def _chat(self, *, system: str, user: str, schema: dict[str, Any]) -> dict:
+    async def _chat(
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        call_name: str | None = None,
+    ) -> dict:
         import httpx
 
+        effective_call = call_name or getattr(self, "_current_call_name", "chat")
+
         if self._circuit_breaker.is_open():
-            log.warning("gemini: circuit breaker is open; skipping API call")
+            log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
             raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
 
         prompt = (
@@ -318,7 +354,7 @@ class GeminiLLMClient(OllamaLLMClient):
         )
         cached = self._cache.get(cache_key)
         if cached is not None:
-            log.info("gemini: cache hit for key %s", cache_key[:12])
+            log.info("gemini: cache hit for key %s (call=%s)", cache_key[:12], effective_call)
             self.last_provider = "gemini-cache"
             return cached
 
@@ -342,18 +378,51 @@ class GeminiLLMClient(OllamaLLMClient):
 
         async with httpx.AsyncClient(**client_kwargs) as client:
             for attempt in range(1, MAX_ATTEMPTS + 1):
-                resp = await client.post(url, json=body, headers=headers)
-                if resp.status_code == 429 and _is_daily_quota_exhausted(resp):
-                    self._circuit_breaker.trip()
-                    resp.raise_for_status()
+                t0 = time.monotonic()
+                try:
+                    resp = await client.post(url, json=body, headers=headers)
+                except httpx.TimeoutException as exc:
+                    elapsed = time.monotonic() - t0
+                    log.warning(
+                        "gemini: timeout occurred (call=%s status=TIMEOUT error.status=None quota_ids=None elapsed=%.2fs exception=%s)",
+                        effective_call,
+                        elapsed,
+                        type(exc).__name__,
+                    )
+                    raise
+
+                elapsed = time.monotonic() - t0
+
+                if resp.status_code == 429:
+                    data = resp.json() if hasattr(resp, "json") else {}
+                    err = data.get("error", {}) if isinstance(data, dict) else {}
+                    if isinstance(err, dict):
+                        err_status = err.get("status")
+                        details = err.get("details", []) if isinstance(err.get("details"), list) else []
+                    else:
+                        err_status = str(err) if err else None
+                        details = []
+                    quota_ids = _extract_quota_ids(details)
+                    log.warning(
+                        "gemini: 429 received (call=%s status=%s error.status=%s quota_ids=%s elapsed=%.2fs)",
+                        effective_call,
+                        resp.status_code,
+                        err_status,
+                        quota_ids,
+                        elapsed,
+                    )
+                    if _is_daily_quota_exhausted(resp):
+                        self._circuit_breaker.trip()
+                        resp.raise_for_status()
 
                 if resp.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS:
                     delay = _retry_delay(resp, attempt)
                     log.warning(
-                        "gemini: HTTP %s, retry %d in %.0fs",
+                        "gemini: HTTP %s, retry %d in %.0fs (call=%s)",
                         resp.status_code,
                         attempt,
                         delay,
+                        effective_call,
                     )
                     await asyncio.sleep(delay)
                     continue
@@ -361,14 +430,36 @@ class GeminiLLMClient(OllamaLLMClient):
                 parsed = _extract_json(_response_text(resp.json()))
                 self._cache.set(cache_key, parsed)
                 self.last_provider = "gemini"
-                log.info("gemini: call succeeded (model=%s attempt=%d)", self._model, attempt)
+                log.info(
+                    "gemini: call succeeded (call=%s model=%s attempt=%d elapsed=%.2fs)",
+                    effective_call,
+                    self._model,
+                    attempt,
+                    elapsed,
+                )
                 return parsed
         raise RuntimeError("gemini: retries exhausted")
+
+    async def attribute(
+        self, anomalies: list[Anomaly], kb_context: Iterable[KBEntry] = ()
+    ) -> Attribution:
+        self._current_call_name = "attribute"
+        return await super().attribute(anomalies, kb_context)
 
     async def attribute_primary(
         self, anomalies: list[Anomaly], kb_context: Iterable[KBEntry] = ()
     ) -> Attribution:
+        self._current_call_name = "attribute_primary"
         return _repair_attribution(await super().attribute_primary(anomalies, kb_context))
+
+    async def attribute_redteam(
+        self,
+        primary: Attribution,
+        anomalies: list[Anomaly],
+        kb_context: Iterable[KBEntry] = (),
+    ) -> AttributionChallenge:
+        self._current_call_name = "attribute_redteam"
+        return await super().attribute_redteam(primary, anomalies, kb_context)
 
     async def reconcile(
         self,
@@ -377,11 +468,13 @@ class GeminiLLMClient(OllamaLLMClient):
         anomalies: list[Anomaly],
         kb_context: Iterable[KBEntry] = (),
     ) -> Attribution:
+        self._current_call_name = "reconcile"
         return _repair_attribution(
             await super().reconcile(primary, challenge, anomalies, kb_context)
         )
 
     async def decide(self, attribution: Attribution) -> Decision:
+        self._current_call_name = "decide"
         decision = await super().decide(attribution)
         fixed = validate_and_repair_decision(decision.model_dump())
         return decision.model_copy(update={"request_packet": fixed.get("request_packet")})

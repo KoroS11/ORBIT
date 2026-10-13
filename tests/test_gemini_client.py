@@ -579,7 +579,7 @@ async def test_ambiguous_429_keeps_normal_retries_and_does_not_trip_circuit_brea
 
 
 async def test_gemini_call_succeeded_log_emitted(caplog) -> None:
-    """Successful Gemini call logs INFO message with model and attempt."""
+    """Successful Gemini call logs INFO message with call name, model, attempt, and elapsed."""
     import logging
 
     canned_payload = {
@@ -604,9 +604,84 @@ async def test_gemini_call_succeeded_log_emitted(caplog) -> None:
         await client.attribute([_anomaly()])
 
     assert any(
-        "gemini: call succeeded (model=gemini-3.1-flash-lite attempt=1)" in record.message
+        "gemini: call succeeded (call=attribute_primary model=gemini-3.1-flash-lite attempt=1 elapsed=" in record.message
         for record in caplog.records
     )
+
+
+async def test_gemini_429_warning_log_emitted(caplog) -> None:
+    """429 response logs WARNING with call name, status, error.status, quota IDs, and elapsed."""
+    import logging
+    from tests.test_gemini_client import REAL_GOOGLE_DAILY_429
+
+    class _RateLimitedTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, json=REAL_GOOGLE_DAILY_429)
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_RateLimitedTransport(),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.attribute_primary([_anomaly()])
+
+    record = next(
+        (r for r in caplog.records if "gemini: 429 received" in r.message),
+        None,
+    )
+    assert record is not None
+    assert record.levelno == logging.WARNING
+    assert "call=attribute_primary" in record.message
+    assert "status=429" in record.message
+    assert "error.status=RESOURCE_EXHAUSTED" in record.message
+    assert "GenerateContentRequestsPerDayPerProject" in record.message
+    assert "elapsed=" in record.message
+
+
+async def test_gemini_timeout_warning_log_emitted(caplog) -> None:
+    """Timeout logs WARNING with call name, status=TIMEOUT, exception name, and elapsed."""
+    import logging
+
+    class _TimeoutTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("The read operation timed out")
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-2.5-flash",
+        transport=_TimeoutTransport(),
+    )
+
+    primary = Attribution(
+        anomaly_ids=["sig-1"],
+        actor="China",
+        confidence=0.8,
+        evidence=["test"],
+        kb_citations=["kb-rpo-ambiguity-001"],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(httpx.ReadTimeout):
+            await client.attribute_redteam(primary, [_anomaly()])
+
+    record = next(
+        (r for r in caplog.records if "gemini: timeout occurred" in r.message),
+        None,
+    )
+    assert record is not None
+    assert record.levelno == logging.WARNING
+    assert "call=attribute_redteam" in record.message
+    assert "status=TIMEOUT" in record.message
+    assert "error.status=None" in record.message
+    assert "quota_ids=None" in record.message
+    assert "exception=ReadTimeout" in record.message
+    assert "elapsed=" in record.message
+
 
 
 

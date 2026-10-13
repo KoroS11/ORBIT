@@ -83,6 +83,15 @@ def _persist_decision_reviews(reviews: dict[str, Any]) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     load_dotenv()
+    log_level = os.environ.get("ORBIT_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, log_level, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger().setLevel(level)
+    logging.getLogger("orbit").setLevel(level)
+
     provider = resolve_provider(llm_flag=None)
     log.info("ORBIT API starting (llm=%s)", provider)
 
