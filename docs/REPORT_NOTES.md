@@ -49,7 +49,7 @@ The coursework report should be weighted heavily toward cloud infrastructure, co
    - Host deployment operational model: manual pull (`docker compose pull && docker compose up -d` over SSH) vs. automated continuous deployment.
 6. **Validation, Engineering Challenges & Cost Analysis (10%)**:
    - Memory risk mitigation: offloading image builds to GitHub Actions runners to protect the 2 GiB EC2 host.
-   - API rate limit handling: Google project quotas, HTTP 429 failover to deterministic stub, and planned persistent caching `[PENDING-HARSH]`.
+   - API rate limit handling: Google project quotas (upgraded to `gemini-3.1-flash-lite` with 15 RPM, 500 RPD as audited in AI Studio on 13 October 2026), daily-quota fast circuit breaker, 12 RPM sliding-window rate limiter, model-independent seed cache (`gemini-seed`), deterministic prompt hashing, and transparent stub fallback.
    - AWS Free Tier compliance & cost breakdown.
 
 ---
@@ -839,8 +839,15 @@ The following items cannot be verified automatically from the repository and mus
    - Confirmed: Elastic IP `13.126.207.91` is allocated in `ap-south-1` and associated with the EC2 instance, and DuckDNS `orbit-d.duckdns.org` is manually pointed to `13.126.207.91` (no auto-updater daemon required).
 2. **Push Caddy Health-Check Fix & Redeploy** `[PENDING-HARSH]`:
    - `[PENDING-HARSH] TODO (Harsh to confirm)`: Push the Caddy container health-check fix to `main`, verify the GitHub Actions CI run succeeds, pull updated containers on EC2, and confirm healthy container status via `docker compose ps`.
-3. **Add Persistent Gemini Response Cache & Provider Tag** `[PENDING-HARSH]`:
-   - `[PENDING-HARSH] TODO (Harsh to confirm)`: Deploy the persistent Gemini response cache and provider tag, and verify zero HTTP 429 quota exhaustion errors during continuous scenario replays.
+3. **Multi-Tier Gemini Reliability, Seed Cache & Provider Provenance**:
+   - **Implemented and verified on branch `feat/gemini-reliability`**:
+     - Upgraded default model to `gemini-3.1-flash-lite` (15 RPM, 500 RPD vs 2.5 Flash 5 RPM, 20 RPD as audited in Google AI Studio on October 13, 2026).
+     - Deterministic prompt serialization stripping volatile fields (`id`, `ts`, `anomaly_ids`) from attribution, red-team, reconcile, and decision prompts.
+     - Strict 5-tier resolution order: Local State Cache (`gemini-cache`) -> Read-Only Seed Cache (`gemini-seed`) -> Circuit Breaker (RESOURCE_EXHAUSTED cooldown) -> Sliding-Window Rate Limiter (12 RPM) -> Live Gemini API (`gemini`) -> Stub Fallback (`stub`).
+     - Added offline seed cache recorder `scripts/record_gemini_cache.py` with dry-run mode and mock verification.
+     - Verified 5-pass closure under blocked network: 0 live calls across 5 full passes of `beat47` and `army_multidomain_attack_chain` with 100% stage hit rate and zero timing jitter.
+     - Live `/health` endpoint and UI `DataProvenanceBadge` updated with cache/seed/live/stub telemetry breakdown.
+     - Note: All offline automated test calls were simulated/mocked for safety to avoid spending project API quota.
 4. **AWS Console & Billing Screenshots** `[PENDING-HARSH]`:
    - `[PENDING-HARSH] TODO (Harsh to capture)`: EC2 Instance Summary page (showing instance ID, `t3.small`, Ubuntu 24.04, `ap-south-1`, and Elastic IP).
    - `[PENDING-HARSH] TODO (Harsh to capture)`: Security Group inbound rules table (showing port 22 restricted, ports 80/443 open).

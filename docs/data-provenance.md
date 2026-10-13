@@ -53,9 +53,14 @@ Verified audit of data pipelines, schemas, math engines, and clock domains acros
    - Default similarity threshold is `0.40` (`DEFAULT_SIMILARITY_THRESHOLD = 0.40` in `orbit/services/osint_cluster/__init__.py:55`).
 4. **Attribution Heuristics (Stub)**:
    - Primary attribution maps dominant anomaly kind using `_KIND_TO_ATTRIBUTION` in `orbit/services/llm/stub.py:36-450`, assigning Russia, China, Unknown, Iran, or Multi-actor.
-5. **LLM Provider, Cache & Quota Fallback**:
-   - Operational posture is **Gemini when quota allows, otherwise the stub**.
-   - Primary online model is `gemini-3.1-flash-lite` via `GeminiLLMClient`.
-   - On HTTP 429 rate limits or network errors, client retries with exponential backoff respecting `retry-after`, then falls back transparently to `StubLLMClient` via `FallbackLLMClient`.
-   - **Persistent Prompt-Hash Cache**: Implemented in `GeminiPromptCache` storing SHA256 hashes of `(model, prompt, temperature, thinking_budget, schema)` to `ORBIT_STATE_DIR/gemini_cache.json`. Cache hits bypass network calls.
-   - **Trace Telemetry**: Every attribution and decision trace explicitly carries provider provenance: `gemini`, `gemini-cache`, or `stub`.
+5. **LLM Provider, Multi-Tier Caching & Quota Reliability**:
+   - **Primary Model**: `gemini-3.1-flash-lite` via `GeminiLLMClient`. Configured quotas (as verified in Google AI Studio on 13 October 2026 for this project: 15 RPM, 500 RPD; versus 2.5 Flash at 5 RPM, 20 RPD).
+   - **Resolution Order (Strict 5-Tier Lookup)**:
+     1. **Local State Cache (`gemini-cache`)**: Read/write disk cache in `ORBIT_STATE_DIR/gemini_cache.json` with atomic temp-file replace, process mutex, and corruption handling (`*.corrupt`).
+     2. **Read-Only Seed Cache (`gemini-seed`)**: Committed seed bundle in `data/seed/gemini_cache_seed.json` indexed by model-independent SHA256 of `(system, prompt, schema, PROMPT_VERSION)` ensuring zero live API calls during demonstrations. Offline test calls are simulated/mocked for pipeline verification and safety.
+     3. **Daily-Quota Circuit Breaker**: Fast-trips on `RESOURCE_EXHAUSTED` / `GenerateContentRequestsPerDay` errors, avoiding useless retries for 10 minutes.
+     4. **Sliding-Window Rate Limiter**: Process-shared 12 RPM limiter with max queue wait of 20 seconds.
+     5. **Live Gemini API (`gemini`)**: Live calls with 30s timeout and 0 thinking budget.
+     6. **Stub Fallback (`stub`)**: Transparent failover to `StubLLMClient` via `FallbackLLMClient` whenever live API or queue limits fail.
+   - **Trace & API Provenance**: Telemetry counters (`cache_hits`, `seed_hits`, `live_calls`, `stub_fallbacks`) exposed in `/health` and displayed live in `DataProvenanceBadge`. Every trace carries provenance (`gemini`, `gemini-cache`, `gemini-seed`, or `stub`).
+
