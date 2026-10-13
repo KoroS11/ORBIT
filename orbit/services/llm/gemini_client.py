@@ -359,6 +359,82 @@ class GeminiSeedCache:
         return len(self._memory)
 
 
+class GeminiRateLimiter:
+    """Sliding-window process-shared rate limiter for Gemini API calls.
+
+    Tracks calls over a 60-second sliding window. When capacity (ORBIT_GEMINI_MAX_RPM)
+    is reached, calls wait their turn rather than triggering 429 errors.
+    If the required wait exceeds ORBIT_GEMINI_MAX_QUEUE_WAIT_S (default 20s),
+    raises RuntimeError so FallbackLLMClient falls back to the stub.
+    """
+
+    def __init__(
+        self,
+        max_rpm: int | None = None,
+        max_queue_wait_s: float | None = None,
+        *,
+        clock: Any | None = None,
+        sleep_fn: Any | None = None,
+    ) -> None:
+        raw_rpm = max_rpm if max_rpm is not None else os.environ.get("ORBIT_GEMINI_MAX_RPM")
+        self.max_rpm = int(raw_rpm) if raw_rpm else 12
+        raw_wait = (
+            max_queue_wait_s
+            if max_queue_wait_s is not None
+            else os.environ.get("ORBIT_GEMINI_MAX_QUEUE_WAIT_S")
+        )
+        self.max_queue_wait_s = float(raw_wait) if raw_wait else 20.0
+        self._clock = clock if clock is not None else time.monotonic
+        self._sleep = sleep_fn if sleep_fn is not None else asyncio.sleep
+        from collections import deque
+        self._calls: deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> float:
+        """Wait for available capacity or raise if wait > max_queue_wait_s."""
+        async with self._lock:
+            now = self._clock()
+            # Purge calls older than 60 seconds
+            while self._calls and self._calls[0] <= now - 60.0:
+                self._calls.popleft()
+
+            if len(self._calls) < self.max_rpm:
+                self._calls.append(now)
+                return 0.0
+
+            oldest = self._calls[0]
+            wait_s = (oldest + 60.0) - now
+            if wait_s > self.max_queue_wait_s:
+                raise RuntimeError(
+                    f"gemini: rate limit wait of {wait_s:.1f}s exceeds maximum queue wait of {self.max_queue_wait_s:.1f}s (max_rpm={self.max_rpm})"
+                )
+
+            log.info(
+                "gemini: rate limiter queuing call for %.2fs (rpm limit %d reached)",
+                wait_s,
+                self.max_rpm,
+            )
+            await self._sleep(wait_s)
+            now_after = self._clock()
+            while self._calls and self._calls[0] <= now_after - 60.0:
+                self._calls.popleft()
+            self._calls.append(now_after)
+            return wait_s
+
+    def reset(self) -> None:
+        self._calls.clear()
+
+
+_PROCESS_RATE_LIMITER: GeminiRateLimiter | None = None
+
+
+def get_process_rate_limiter() -> GeminiRateLimiter:
+    global _PROCESS_RATE_LIMITER
+    if _PROCESS_RATE_LIMITER is None:
+        _PROCESS_RATE_LIMITER = GeminiRateLimiter()
+    return _PROCESS_RATE_LIMITER
+
+
 def _retry_delay(resp: Any, attempt: int) -> float:
     try:
         if hasattr(resp, "headers") and "retry-after" in resp.headers:
@@ -400,6 +476,7 @@ class GeminiLLMClient(OllamaLLMClient):
         cache: GeminiPromptCache | None | bool = None,
         seed_cache: GeminiSeedCache | None | bool = None,
         circuit_breaker: GeminiCircuitBreaker | None = None,
+        rate_limiter: GeminiRateLimiter | None | bool = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
         self._kb = kb
@@ -445,6 +522,13 @@ class GeminiLLMClient(OllamaLLMClient):
         self._circuit_breaker = (
             circuit_breaker if circuit_breaker is not None else GeminiCircuitBreaker()
         )
+        if rate_limiter is False:
+            self._rate_limiter: GeminiRateLimiter | None = None
+        elif rate_limiter is not None:
+            self._rate_limiter = rate_limiter
+        else:
+            self._rate_limiter = get_process_rate_limiter()
+
         self.last_provider: str = "gemini"
         self._current_call_name: str = "chat"
         self.cache_hits: int = 0
@@ -514,6 +598,10 @@ class GeminiLLMClient(OllamaLLMClient):
         if self._circuit_breaker.is_open():
             log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
             raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
+
+        # 4. Client-side rate limiter check: wait turn or raise if wait > max_queue_wait_s
+        if self._rate_limiter is not None:
+            await self._rate_limiter.acquire()
 
         gen_config: dict[str, Any] = {
             "temperature": 0.2,

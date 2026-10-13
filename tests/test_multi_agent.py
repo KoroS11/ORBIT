@@ -225,3 +225,53 @@ def test_prompts_are_deterministic_without_volatile_fields():
     assert prim1.id not in dec1
     assert prim2.id not in dec2
 
+
+@pytest.mark.asyncio
+async def test_attrib_service_signal_latency_budget_timeout():
+    """Verify AttribService falls back to stub attribution when signal budget expires."""
+    kb = KB.load_from_json(KB_FILE)
+    bus = InProcessBus()
+    tracer = Tracer(bus)
+
+    class SlowLLMClient(StubLLMClient):
+        async def attribute_primary(self, anomalies, context=None):
+            await asyncio.sleep(0.5)
+            return await super().attribute_primary(anomalies, context)
+
+    slow_llm = SlowLLMClient(kb)
+    attrib = AttribService(bus, slow_llm, kb, window_s=0.0, tracer=tracer, signal_budget_s=0.05)
+
+    received: list[Attribution] = []
+
+    async def consume() -> None:
+        async for _, event in bus.subscribe("attributions.*"):
+            if isinstance(event, Attribution):
+                received.append(event)
+                break
+
+    consumer = asyncio.create_task(consume())
+    runner = asyncio.create_task(attrib.run())
+    await asyncio.sleep(0)
+
+    await bus.publish("anomalies.orbital_rpo_risk", _anomaly())
+    await asyncio.wait_for(consumer, timeout=2.0)
+
+    runner.cancel()
+    try:
+        await runner
+    except asyncio.CancelledError:
+        pass
+
+    assert len(received) == 1
+    # Check that fallback stub attribution was emitted
+    assert isinstance(received[0], Attribution)
+    assert received[0].actor in [
+        "China",
+        "Russia",
+        "China / PLA SSF",
+        "Unknown",
+        "Unknown / Ambiguous",
+        "Commercial / Co-orbital Inspection",
+    ]
+
+

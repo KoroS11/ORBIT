@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from collections.abc import Callable
 
@@ -77,6 +78,7 @@ class AttribService:
         tracer: Tracer | None = None,
         blocked_domains: Callable[[], set[Domain]] | None = None,
         multi_agent: bool = True,
+        signal_budget_s: float | None = None,
     ) -> None:
         self._bus = bus
         self._llm = llm
@@ -85,6 +87,8 @@ class AttribService:
         self._tracer = tracer
         self._blocked_domains = blocked_domains
         self._multi_agent = multi_agent
+        raw_budget = signal_budget_s if signal_budget_s is not None else os.environ.get("ORBIT_LLM_SIGNAL_BUDGET_S")
+        self._signal_budget_s = float(raw_budget) if raw_budget else 25.0
         self._buffer: list[Anomaly] = []
         self._flush_task: asyncio.Task | None = None
 
@@ -135,75 +139,81 @@ class AttribService:
             context = self._kb.all_entries()
 
         # Multi-agent attribution loop: primary → red-team → reconcile.
-        # The intermediate primary + challenge live entirely in the trace
-        # stream; downstream services see only the final reconciled
-        # attribution on ``attributions.{actor}``. When ``multi_agent`` is
-        # disabled (benchmark mode), we publish the primary attribution
-        # directly so the comparison isolates whether the red-team loop
-        # is pulling its weight against single-pass attribution.
+        # Guarded by per-signal latency budget (ORBIT_LLM_SIGNAL_BUDGET_S, default 25s).
         try:
-            primary = await self._llm.attribute_primary(anomalies, context)
-        except Exception:
-            log.exception(
-                "attrib: attribute_primary failed for batch of %d", len(anomalies)
-            )
-            return
-        if self._tracer is not None:
-            provider = getattr(self._llm, "last_provider", "stub")
-            await self._tracer.emit(
-                "attrib_primary",
-                "info",
-                f"[{provider}] actor={primary.actor} confidence={primary.confidence:.2f}",
-                ref_id=primary.id,
-                actor=primary.actor,
-                confidence=primary.confidence,
-                provider=provider,
-            )
-
-        if not self._multi_agent:
-            attribution = primary
-        else:
-            try:
-                challenge = await self._llm.attribute_redteam(
-                    primary, anomalies, context
-                )
-            except Exception:
-                log.exception(
-                    "attrib: attribute_redteam failed for primary=%s", primary.id
-                )
-                attribution = primary
-            else:
-                if self._tracer is not None:
-                    alt = challenge.alternative_actor or "uncertainty floor"
-                    provider = getattr(self._llm, "last_provider", "stub")
-                    await self._tracer.emit(
-                        "attrib_redteam",
-                        "warn" if challenge.confidence_delta < 0 else "info",
-                        f"[{provider}] challenge: {challenge.rationale}",
-                        ref_id=primary.id,
-                        alternative_actor=alt,
-                        confidence_delta=challenge.confidence_delta,
-                        objections=challenge.objections,
-                        provider=provider,
-                    )
+            async with asyncio.timeout(self._signal_budget_s):
                 try:
-                    attribution = await self._llm.reconcile(
-                        primary, challenge, anomalies, context
-                    )
-                    attribution_updates: dict[str, Any] = {}
-                    if not getattr(attribution, "redteam_challenge", None):
-                        attribution_updates["redteam_challenge"] = challenge.rationale
-                    if not getattr(attribution, "reconcile_rationale", None):
-                        attribution_updates["reconcile_rationale"] = (
-                            f"Reconciled {attribution.actor} ({attribution.confidence:.2f}) with delta {challenge.confidence_delta:+.2f}"
-                        )
-                    if attribution_updates:
-                        attribution = attribution.model_copy(update=attribution_updates)
+                    primary = await self._llm.attribute_primary(anomalies, context)
                 except Exception:
                     log.exception(
-                        "attrib: reconcile failed for primary=%s", primary.id
+                        "attrib: attribute_primary failed for batch of %d", len(anomalies)
                     )
+                    return
+                if self._tracer is not None:
+                    provider = getattr(self._llm, "last_provider", "stub")
+                    await self._tracer.emit(
+                        "attrib_primary",
+                        "info",
+                        f"[{provider}] actor={primary.actor} confidence={primary.confidence:.2f}",
+                        ref_id=primary.id,
+                        actor=primary.actor,
+                        confidence=primary.confidence,
+                        provider=provider,
+                    )
+
+                if not self._multi_agent:
                     attribution = primary
+                else:
+                    try:
+                        challenge = await self._llm.attribute_redteam(
+                            primary, anomalies, context
+                        )
+                    except Exception:
+                        log.exception(
+                            "attrib: attribute_redteam failed for primary=%s", primary.id
+                        )
+                        attribution = primary
+                    else:
+                        if self._tracer is not None:
+                            alt = challenge.alternative_actor or "uncertainty floor"
+                            provider = getattr(self._llm, "last_provider", "stub")
+                            await self._tracer.emit(
+                                "attrib_redteam",
+                                "warn" if challenge.confidence_delta < 0 else "info",
+                                f"[{provider}] challenge: {challenge.rationale}",
+                                ref_id=primary.id,
+                                alternative_actor=alt,
+                                confidence_delta=challenge.confidence_delta,
+                                objections=challenge.objections,
+                                provider=provider,
+                            )
+                        try:
+                            attribution = await self._llm.reconcile(
+                                primary, challenge, anomalies, context
+                            )
+                            attribution_updates: dict[str, Any] = {}
+                            if not getattr(attribution, "redteam_challenge", None):
+                                attribution_updates["redteam_challenge"] = challenge.rationale
+                            if not getattr(attribution, "reconcile_rationale", None):
+                                attribution_updates["reconcile_rationale"] = (
+                                    f"Reconciled {attribution.actor} ({attribution.confidence:.2f}) with delta {challenge.confidence_delta:+.2f}"
+                                )
+                            if attribution_updates:
+                                attribution = attribution.model_copy(update=attribution_updates)
+                        except Exception:
+                            log.exception(
+                                "attrib: reconcile failed for primary=%s", primary.id
+                            )
+                            attribution = primary
+        except TimeoutError:
+            log.warning(
+                "attrib: per-signal LLM latency budget (%.1fs) exceeded for batch of %d; falling back to stub attribution",
+                self._signal_budget_s,
+                len(anomalies),
+            )
+            from orbit.services.llm.stub import StubLLMClient
+            stub = StubLLMClient(self._kb)
+            attribution = await stub.attribute(anomalies, context)
 
         # Stress-mode confidence haircut: if any critical input domain for
         # this anomaly cluster is blocked, lower confidence and surface the

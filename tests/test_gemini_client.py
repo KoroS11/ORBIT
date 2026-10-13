@@ -13,7 +13,11 @@ import httpx
 import pytest
 
 from orbit.services.kb import KB
-from orbit.services.llm.gemini_client import FallbackLLMClient, GeminiLLMClient
+from orbit.services.llm.gemini_client import (
+    FallbackLLMClient,
+    GeminiLLMClient,
+    GeminiRateLimiter,
+)
 from orbit.services.llm.stub import StubLLMClient
 from orbit.services.llm.validation import UNCERTAINTY_ANCHOR
 from orbit.services.schemas.events import Anomaly, Attribution
@@ -1058,6 +1062,117 @@ def test_seed_cache_file_safety_and_size():
     for pattern in api_key_patterns:
         matches = pattern.findall(content)
         assert len(matches) == 0, f"Detected API key-like strings in seed cache: {matches}"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_immediate_capacity_and_queuing():
+    """Verify 12 calls pass immediately and 13th waits when under max_queue_wait_s."""
+    current_time = 100.0
+
+    def mock_clock() -> float:
+        return current_time
+
+    async def mock_sleep(delay: float) -> None:
+        nonlocal current_time
+        current_time += delay
+
+    limiter = GeminiRateLimiter(
+        max_rpm=12,
+        max_queue_wait_s=20.0,
+        clock=mock_clock,
+        sleep_fn=mock_sleep,
+    )
+
+    # 1st call at t=100.0
+    wait = await limiter.acquire()
+    assert wait == 0.0
+
+    # Next 11 calls at t=110.0
+    current_time = 110.0
+    for _ in range(11):
+        wait = await limiter.acquire()
+        assert wait == 0.0
+
+    assert len(limiter._calls) == 12
+
+    # Advance clock to t=145.0 (45s elapsed since oldest call at t=100.0)
+    current_time = 145.0
+
+    # 13th call requires waiting (100.0 + 60.0) - 145.0 = 15.0s, which is <= 20.0s
+    wait = await limiter.acquire()
+    assert wait == pytest.approx(15.0)
+    assert current_time == pytest.approx(160.0)
+    assert len(limiter._calls) == 12
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_exceeds_max_queue_wait_raises():
+    """Verify call raising RuntimeError when wait exceeds max_queue_wait_s."""
+    current_time = 100.0
+
+    def mock_clock() -> float:
+        return current_time
+
+    async def mock_sleep(delay: float) -> None:
+        nonlocal current_time
+        current_time += delay
+
+    limiter = GeminiRateLimiter(
+        max_rpm=12,
+        max_queue_wait_s=20.0,
+        clock=mock_clock,
+        sleep_fn=mock_sleep,
+    )
+
+    for _ in range(12):
+        await limiter.acquire()
+
+    # Advance clock by only 5 seconds to t=105.0. Wait would be 60 - 5 = 55s > 20s.
+    current_time = 105.0
+    with pytest.raises(RuntimeError, match="exceeds maximum queue wait"):
+        await limiter.acquire()
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_exceeded_falls_back_to_stub():
+    """Verify FallbackLLMClient catches rate limiter RuntimeError and falls back to stub."""
+    kb = _kb()
+    anomaly = _anomaly()
+
+    current_time = 100.0
+
+    def mock_clock() -> float:
+        return current_time
+
+    async def mock_sleep(delay: float) -> None:
+        nonlocal current_time
+        current_time += delay
+
+    limiter = GeminiRateLimiter(
+        max_rpm=1,
+        max_queue_wait_s=10.0,
+        clock=mock_clock,
+        sleep_fn=mock_sleep,
+    )
+    # Fill capacity
+    await limiter.acquire()
+
+    client = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        cache=False,
+        seed_cache=False,
+        rate_limiter=limiter,
+    )
+    fallback = FallbackLLMClient(client, StubLLMClient(kb))
+
+    # Next call would wait 60s > 10s, raising RuntimeError and triggering fallback
+    attr = await fallback.attribute([anomaly])
+    assert isinstance(attr, Attribution)
+    assert fallback.last_provider == "stub"
+    assert fallback.stub_fallbacks == 1
+    assert fallback.fallback_count == 1
+
 
 
 
