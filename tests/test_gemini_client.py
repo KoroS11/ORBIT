@@ -683,5 +683,66 @@ async def test_gemini_timeout_warning_log_emitted(caplog) -> None:
     assert "elapsed=" in record.message
 
 
+async def test_breaker_open_returns_cached_answer_with_gemini_cache_provider(tmp_path) -> None:
+    """When circuit breaker is open, a cached prompt returns the cached answer with provider gemini-cache."""
+    canned_payload = {
+        "actor": "China",
+        "confidence": 0.77,
+        "evidence": ["cached evidence"],
+        "kb_citations": ["kb-rpo-ambiguity-001", "kb-attribution-uncertainty-001"],
+    }
+
+    from orbit.services.llm.gemini_client import (
+        FallbackLLMClient,
+        GeminiCircuitBreaker,
+        GeminiPromptCache,
+    )
+    from orbit.services.llm.stub import StubLLMClient
+
+    cache_file = tmp_path / "gemini_cache.json"
+    cache = GeminiPromptCache(cache_file=cache_file)
+    breaker = GeminiCircuitBreaker(cooldown_minutes=10)
+
+    call_count = 0
+
+    class _Transport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise RuntimeError("Transport should not be called when cached!")
+            return httpx.Response(200, json=_gemini_response(canned_payload))
+
+    primary = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_Transport(),
+        circuit_breaker=breaker,
+        cache=cache,
+    )
+    fallback = FallbackLLMClient(primary, StubLLMClient(_kb()))
+
+    anomaly = _anomaly()
+
+    # First call: live call succeeds, populates cache
+    attr1 = await fallback.attribute_primary([anomaly])
+    assert attr1.actor == "China"
+    assert call_count == 1
+    assert fallback.last_provider == "gemini"
+
+    # Trip the circuit breaker
+    breaker.trip()
+    assert breaker.is_open() is True
+
+    # Second call with breaker OPEN: cache lookup happens BEFORE breaker check,
+    # so cached answer is returned with provider "gemini-cache" and zero transport calls!
+    attr2 = await fallback.attribute_primary([anomaly])
+    assert attr2.actor == "China"
+    assert call_count == 1  # No network call
+    assert primary.last_provider == "gemini-cache"
+    assert fallback.last_provider == "gemini-cache"
+
+
 
 

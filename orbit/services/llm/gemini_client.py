@@ -335,10 +335,6 @@ class GeminiLLMClient(OllamaLLMClient):
 
         effective_call = call_name or getattr(self, "_current_call_name", "chat")
 
-        if self._circuit_breaker.is_open():
-            log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
-            raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
-
         prompt = (
             f"{user}\n\n"
             "Reply with a single JSON object that conforms to this schema:\n"
@@ -357,6 +353,10 @@ class GeminiLLMClient(OllamaLLMClient):
             log.info("gemini: cache hit for key %s (call=%s)", cache_key[:12], effective_call)
             self.last_provider = "gemini-cache"
             return cached
+
+        if self._circuit_breaker.is_open():
+            log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
+            raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
 
         gen_config: dict[str, Any] = {
             "temperature": 0.2,
