@@ -102,6 +102,11 @@ async def _lifespan(app: FastAPI):
         blocked_domains_provider=lambda: app.state.blocked_domains,
     )
     app.state.engine = engine
+    try:
+        await engine.osint_cluster.warmup()
+    except Exception as exc:
+        log.warning("api: osint_cluster warmup failed on startup: %s", exc)
+
     app.state.decision_reviews = _load_decision_reviews()
     app.state.clients = set()
     app.state.replay_task = None
@@ -233,6 +238,7 @@ def create_app() -> FastAPI:
             "kb_entries": len(engine.kb) if engine else 0,
             "clients": len(getattr(app.state, "clients", ())),
             "osint_cluster": osint,
+            "osint": osint,
         }
 
     @app.get("/scenarios")
@@ -333,6 +339,10 @@ def create_app() -> FastAPI:
         prev = app.state.replay_task
         if prev is not None and not prev.done():
             prev.cancel()
+            try:
+                await prev
+            except (asyncio.CancelledError, Exception):
+                pass
             app.state.replay_task = None
 
         if hasattr(app.state, "engine"):

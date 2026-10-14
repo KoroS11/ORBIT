@@ -44,6 +44,7 @@ class Engine:
     osint_cluster: OsintClusterService
 
     def reset(self) -> None:
+        self.bus.reset()
         self.fusion.reset()
         self.osint_cluster.reset()
         self.attrib.reset()

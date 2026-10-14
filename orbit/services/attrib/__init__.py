@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import UTC, datetime
 
 from collections.abc import Callable
 
@@ -91,21 +92,53 @@ class AttribService:
         self._signal_budget_s = float(raw_budget) if raw_budget else 25.0
         self._buffer: list[Anomaly] = []
         self._flush_task: asyncio.Task | None = None
+        self._queue: asyncio.Queue[list[Anomaly]] = asyncio.Queue()
+        self._worker_task: asyncio.Task | None = None
+        self._active_workers: int = 0
+
+    @property
+    def is_idle(self) -> bool:
+        """True when no buffered anomalies, no active timer, empty queue, and no in-flight LLM calls."""
+        return (
+            not self._buffer
+            and (self._flush_task is None or self._flush_task.done())
+            and self._queue.empty()
+            and self._active_workers == 0
+        )
 
     def reset(self) -> None:
         self._buffer.clear()
         if self._flush_task is not None and not self._flush_task.done():
             self._flush_task.cancel()
             self._flush_task = None
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except Exception:
+                break
 
     async def run(self) -> None:
-        async def flush() -> None:
+        async def timer_flush() -> None:
             await asyncio.sleep(self._window_s)
             if not self._buffer:
                 return
             batch = list(self._buffer)
             self._buffer.clear()
-            await self._process(batch)
+            await self._queue.put(batch)
+
+        async def worker() -> None:
+            while True:
+                batch = await self._queue.get()
+                self._active_workers += 1
+                try:
+                    await self._process(batch)
+                except Exception as exc:
+                    log.exception("attrib worker failed processing batch of %d: %s", len(batch), exc)
+                finally:
+                    self._active_workers -= 1
+                    self._queue.task_done()
+
+        self._worker_task = asyncio.create_task(worker(), name="attrib-worker")
 
         try:
             async for topic, event in self._bus.subscribe("anomalies.*"):
@@ -115,14 +148,16 @@ class AttribService:
                     )
                     continue
                 if self._window_s <= 0:
-                    await self._process([event])
+                    await self._queue.put([event])
                     continue
                 self._buffer.append(event)
                 if self._flush_task is None or self._flush_task.done():
-                    self._flush_task = asyncio.create_task(flush())
+                    self._flush_task = asyncio.create_task(timer_flush(), name="attrib-timer-flush")
         finally:
             if self._flush_task is not None and not self._flush_task.done():
                 self._flush_task.cancel()
+            if self._worker_task is not None and not self._worker_task.done():
+                self._worker_task.cancel()
 
     async def _process(self, anomalies: list[Anomaly]) -> None:
         # KB context: union of entries indexed by the source signal ids of
@@ -214,6 +249,10 @@ class AttribService:
             from orbit.services.llm.stub import StubLLMClient
             stub = StubLLMClient(self._kb)
             attribution = await stub.attribute(anomalies, context)
+            if hasattr(self._llm, "fallback_count"):
+                self._llm.fallback_count += 1
+                self._llm.last_fallback_at = datetime.now(UTC).isoformat()
+            setattr(self._llm, "last_provider", "stub")
 
         # Stress-mode confidence haircut: if any critical input domain for
         # this anomaly cluster is blocked, lower confidence and surface the

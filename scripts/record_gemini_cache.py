@@ -20,6 +20,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Ensure generous budgets inside the recorder process
+os.environ["ORBIT_LLM_SIGNAL_BUDGET_S"] = "180"
+os.environ["ORBIT_GEMINI_MAX_QUEUE_WAIT_S"] = "120"
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
@@ -42,7 +45,12 @@ log = logging.getLogger("orbit.recorder")
 
 KB_PATH = REPO_ROOT / "data" / "kb_seed_entries.json"
 DEFAULT_SEED_FILE = REPO_ROOT / "data" / "seed" / "gemini_cache_seed.json"
-DEFAULT_SCENARIOS = ["beat47", "army_multidomain_attack_chain"]
+DEFAULT_SCENARIOS = [
+    "iran_counter_c5isr_brigade",
+    "beat47",
+    "army_multidomain_attack_chain",
+]
+STAGES = ["attribute_primary", "attribute_redteam", "reconcile", "decide"]
 
 
 def _load_existing_seed(path: Path) -> dict[str, Any]:
@@ -133,16 +141,18 @@ class RecordingGeminiClient(GeminiLLMClient):
         self.current_scenario: str = ""
         self.current_pass: int = 1
         self.new_keys_this_pass: int = 0
+        self.live_calls_this_pass: int = 0
         self.total_live_calls: int = 0
         self.daily_quota_hit: bool = False
-        # (scenario, stage) -> {"expected": int, "recorded": int, "missing": int}
-        self.stage_stats: dict[str, dict[str, dict[str, int]]] = {}
+        self.pass_incomplete: bool = False
+        self.fallback_count: int = 0
+        self.used_keys_this_pass: set[str] = set()
+        # scenario -> stage -> set of canonical prompt keys
+        self.keys_by_stage: dict[str, dict[str, set[str]]] = {}
 
     def start_scenario(self, scenario_name: str, pass_num: int = 1) -> None:
         self.current_scenario = scenario_name
         self.current_pass = pass_num
-        if pass_num == 1 and scenario_name not in self.stage_stats:
-            self.stage_stats[scenario_name] = {}
 
     async def _chat(
         self,
@@ -153,22 +163,17 @@ class RecordingGeminiClient(GeminiLLMClient):
         call_name: str | None = None,
     ) -> dict[str, Any]:
         effective_call = call_name or self._current_call_name
-        key = compute_seed_key(system=system, prompt=user, schema=schema)
+        full_prompt = (
+            f"{user}\n\n"
+            "Reply with a single JSON object that conforms to this schema:\n"
+            f"```json\n{json.dumps(schema, indent=2)}\n```"
+        )
+        key = compute_seed_key(system=system, prompt=full_prompt, schema=schema)
 
-        if self.current_pass == 1:
-            if self.current_scenario not in self.stage_stats:
-                self.stage_stats[self.current_scenario] = {}
-            if effective_call not in self.stage_stats[self.current_scenario]:
-                self.stage_stats[self.current_scenario][effective_call] = {
-                    "expected": 0,
-                    "recorded": 0,
-                    "missing": 0,
-                }
-            self.stage_stats[self.current_scenario][effective_call]["expected"] += 1
-            if key in self.seed_data:
-                self.stage_stats[self.current_scenario][effective_call]["recorded"] += 1
-            else:
-                self.stage_stats[self.current_scenario][effective_call]["missing"] += 1
+        self.used_keys_this_pass.add(key)
+        self.keys_by_stage.setdefault(self.current_scenario, {}).setdefault(
+            effective_call, set()
+        ).add(key)
 
         # 1. Existing seed cache hit
         if key in self.seed_data:
@@ -177,11 +182,11 @@ class RecordingGeminiClient(GeminiLLMClient):
                 return entry["response"]
             return entry
 
-        # 2. Key is missing from seed cache
+        # 2. Key is missing from seed cache: dry run discovery
         if self.dry_run:
             self.new_keys_this_pass += 1
             dummy = _get_dummy_response(effective_call)
-            # Store in memory only so subsequent passes verify cache closure
+            # Store in memory only for current pass verification; zero files written
             self.seed_data[key] = {
                 "response": dummy,
                 "metadata": {
@@ -221,6 +226,12 @@ class RecordingGeminiClient(GeminiLLMClient):
                 )
             raise
 
+        # Safety check: NEVER store stub or fallback results
+        if resp_data.get("actor") == "Stub" or getattr(self, "last_provider", "") == "stub":
+            log.warning("Rejecting stub/fallback result from being stored in seed cache")
+            self.pass_incomplete = True
+            return resp_data
+
         # Save to seed data and persist atomically
         self.seed_data[key] = {
             "response": resp_data,
@@ -233,12 +244,8 @@ class RecordingGeminiClient(GeminiLLMClient):
             },
         }
         self.new_keys_this_pass += 1
+        self.live_calls_this_pass += 1
         self.total_live_calls += 1
-        if self.current_scenario in self.stage_stats and effective_call in self.stage_stats[self.current_scenario]:
-            self.stage_stats[self.current_scenario][effective_call]["recorded"] += 1
-            self.stage_stats[self.current_scenario][effective_call]["missing"] = max(
-                0, self.stage_stats[self.current_scenario][effective_call]["missing"] - 1
-            )
         _save_seed_atomic(self.seed_file, self.seed_data, dry_run=self.dry_run)
         return resp_data
 
@@ -280,8 +287,28 @@ async def replay_scenario_for_recording(
     await stop_event.wait()
     await replay_task
 
-    # Wait for the last attribution sliding window flush and decision completion
-    await asyncio.sleep(window_s + 1.5)
+    # Wait for pipeline idle: queue empty, no call in flight, 3s quiet
+    quiet_s = 0.0
+    for _ in range(900):  # max 180s
+        await asyncio.sleep(0.2)
+        if engine.attrib.is_idle:
+            quiet_s += 0.2
+            if quiet_s >= 3.0:
+                break
+        else:
+            quiet_s = 0.0
+    else:
+        log.warning("Scenario %s did not reach pipeline idle within timeout", scenario_name)
+        client.pass_incomplete = True
+
+    # Check for fallbacks in engine services
+    if (
+        getattr(client, "fallback_count", 0) > 0
+        or getattr(engine.attrib, "fallback_count", 0) > 0
+        or getattr(engine.decide, "fallback_count", 0) > 0
+    ):
+        log.warning("Scenario %s experienced LLM fallback", scenario_name)
+        client.pass_incomplete = True
 
     for t in tasks:
         t.cancel()
@@ -296,8 +323,10 @@ def print_summary(
     dry_run: bool,
     pass_counts: list[int],
     total_entries_disk: int,
-    stage_stats: dict[str, dict[str, dict[str, int]]],
+    keys_by_stage: dict[str, dict[str, set[str]]],
+    seed_data: dict[str, Any],
     seed_file: Path,
+    is_closed: bool,
 ) -> None:
     tb_str = f"{thinking_budget}" if thinking_budget is not None else "0 (disabled)"
     print("\n" + "=" * 76)
@@ -307,32 +336,35 @@ def print_summary(
     print(f"Thinking Budget:         {tb_str}")
     print(f"Per-Call Timeout:        {timeout_s:.1f}s")
     if dry_run:
-        print(f"Mode:                    DRY RUN (zero files written, no live API calls)")
+        print("Mode:                    DRY RUN (zero files written, no live API calls)")
         print(f"Seed Cache on Disk:      {seed_file} (Read-only, {total_entries_disk} entries)")
     else:
-        print(f"Mode:                    LIVE API RECORDING")
+        print("Mode:                    LIVE API RECORDING")
         print(f"Seed Cache Target:       {seed_file} ({total_entries_disk} entries)")
     print(f"Passes Completed:        {len(pass_counts)}")
     pass_breakdown = ", ".join(f"Pass {i+1}: {cnt} new" for i, cnt in enumerate(pass_counts))
     print(f"New Keys Per Pass:       {pass_breakdown}")
     print("-" * 76)
-    print(f"{'Scenario':<30} {'Stage':<20} {'Expected':<8} {'Recorded':<8} {'Missing':<8}")
+    print(f"{'Scenario':<30} {'Stage':<20} {'Expected':<8} {'In Seed':<8} {'Missing':<8}")
     print("-" * 76)
-    stages = ["attribute_primary", "attribute_redteam", "reconcile", "decide"]
     tot_exp = tot_rec = tot_mis = 0
-    for scn, stages_dict in sorted(stage_stats.items()):
-        for stg in stages:
-            counts = stages_dict.get(stg, {"expected": 0, "recorded": 0, "missing": 0})
-            exp = counts["expected"]
-            rec = counts["recorded"]
-            mis = counts["missing"]
+    for scn in sorted(keys_by_stage.keys()):
+        for stg in STAGES:
+            keys = keys_by_stage[scn].get(stg, set())
+            exp = len(keys)
+            rec = sum(1 for k in keys if k in seed_data)
+            mis = exp - rec
             tot_exp += exp
             tot_rec += rec
             tot_mis += mis
             print(f"{scn:<30} {stg:<20} {exp:<8} {rec:<8} {mis:<8}")
     print("-" * 76)
     print(f"{'TOTAL':<51} {tot_exp:<8} {tot_rec:<8} {tot_mis:<8}")
-    print("=" * 76 + "\n")
+    print("=" * 76)
+    if is_closed:
+        print("STATUS: CLOSED (1 complete pass with 0 new keys and 0 live calls achieved)\n")
+    else:
+        print("STATUS: NOT CLOSED (Further passes or live calls required)\n")
 
 
 async def run_recorder(
@@ -345,7 +377,8 @@ async def run_recorder(
     speed: float = 5.0,
     window_s: float = 2.0,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> tuple[int, list[int], dict[str, dict[str, dict[str, int]]]]:
+    prune: bool = False,
+) -> tuple[int, list[int], dict[str, dict[str, set[str]]], bool]:
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not dry_run and not transport:
@@ -391,9 +424,14 @@ async def run_recorder(
     )
 
     pass_counts: list[int] = []
+    is_closed = False
 
     for pass_num in range(1, max_passes + 1):
         client.new_keys_this_pass = 0
+        client.live_calls_this_pass = 0
+        client.pass_incomplete = False
+        client.used_keys_this_pass.clear()
+        client.keys_by_stage.clear()
         log.info("Starting pass %d/%d across %d scenarios...", pass_num, max_passes, len(scenario_paths))
 
         for scn_path in scenario_paths:
@@ -403,21 +441,40 @@ async def run_recorder(
                 )
             except Exception as exc:
                 log.warning("Exception during scenario %s: %s", scn_path.name, exc)
+                client.pass_incomplete = True
                 if client.daily_quota_hit or "RESOURCE_EXHAUSTED" in str(exc):
                     break
 
         pass_counts.append(client.new_keys_this_pass)
-        log.info("Pass %d completed: %d new keys added", pass_num, client.new_keys_this_pass)
+        log.info(
+            "Pass %d completed: %d new keys added, %d live calls (incomplete=%s)",
+            pass_num,
+            client.new_keys_this_pass,
+            client.live_calls_this_pass,
+            client.pass_incomplete,
+        )
 
         if client.daily_quota_hit:
             print("NOTICE: Daily quota reached. Stopping cleanly; seed file remains valid.")
             break
 
-        if client.new_keys_this_pass == 0:
-            log.info("Zero new keys discovered in pass %d. Cache is fully closed!", pass_num)
+        # CLOSED means one complete pass with 0 new keys and 0 live calls
+        if not client.pass_incomplete and client.new_keys_this_pass == 0 and client.live_calls_this_pass == 0:
+            is_closed = True
+            log.info("Pass %d is COMPLETE with 0 new keys and 0 live calls. Cache is CLOSED!", pass_num)
             break
 
+    # If --prune is requested, delete seed entries not used in the final complete pass
+    if prune and is_closed:
+        stale_keys = [k for k in list(client.seed_data.keys()) if k not in client.used_keys_this_pass]
+        for k in stale_keys:
+            del client.seed_data[k]
+        log.info("Pruned %d stale seed entries not used in final complete pass", len(stale_keys))
+        if not dry_run:
+            _save_seed_atomic(seed_file, client.seed_data)
+
     total_disk_entries = len(_load_existing_seed(seed_file)) if dry_run else len(client.seed_data)
+    final_seed_for_summary = _load_existing_seed(seed_file) if dry_run else client.seed_data
 
     print_summary(
         model=model,
@@ -426,12 +483,13 @@ async def run_recorder(
         dry_run=dry_run,
         pass_counts=pass_counts,
         total_entries_disk=total_disk_entries,
-        stage_stats=client.stage_stats,
+        keys_by_stage=client.keys_by_stage,
+        seed_data=final_seed_for_summary,
         seed_file=seed_file,
+        is_closed=is_closed,
     )
 
-    return total_disk_entries, pass_counts, client.stage_stats
-
+    return total_disk_entries, pass_counts, client.keys_by_stage, is_closed
 
 
 def main() -> None:
@@ -442,7 +500,7 @@ def main() -> None:
         "--scenarios",
         nargs="+",
         default=DEFAULT_SCENARIOS,
-        help="Scenarios to record (default: beat47 army_multidomain_attack_chain)",
+        help="Scenarios to record (default: iran_counter_c5isr_brigade beat47 army_multidomain_attack_chain)",
     )
     parser.add_argument(
         "--max-calls",
@@ -484,11 +542,16 @@ def main() -> None:
         action="store_true",
         help="Simulate run without live Gemini calls to count required keys",
     )
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="Delete seed entries not used in the final complete pass (stale window shapes)",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
-    asyncio.run(
+    _, _, _, is_closed = asyncio.run(
         run_recorder(
             scenarios=args.scenarios,
             max_calls=args.max_calls,
@@ -498,8 +561,13 @@ def main() -> None:
             dry_run=args.dry_run,
             speed=args.speed,
             window_s=args.window,
+            prune=args.prune,
         )
     )
+
+    if not is_closed:
+        print("ERROR: Recording did not achieve cache closure.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

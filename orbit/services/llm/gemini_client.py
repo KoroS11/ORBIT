@@ -337,9 +337,12 @@ class GeminiSeedCache:
                 content = self._path.read_text(encoding="utf-8")
                 data = json.loads(content)
                 if isinstance(data, dict):
+                    log.info("Loaded %d entries from Gemini seed cache: %s", len(data), self._path)
                     return data
             except Exception as exc:
                 log.warning("Failed to load Gemini seed cache from %s: %s", self._path, exc)
+        else:
+            log.warning("Gemini seed cache file does not exist: %s", self._path)
         return {}
 
     def get(self, key: str) -> Any | None:

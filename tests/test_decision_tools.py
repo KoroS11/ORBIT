@@ -303,6 +303,9 @@ async def test_decide_service_signal_budget_timeout():
     collector.cancel()
     await asyncio.gather(runner, collector, return_exceptions=True)
 
-    # Since the LLM hung and timed out at 0.1s, no decision was published
-    assert len(published_decisions) == 0
+    # Since the LLM timed out at 0.1s, DecideService fell back to StubLLMClient
+    assert len(published_decisions) == 1
+    assert published_decisions[0].attribution_id == "att-test-timeout"
+    assert published_decisions[0].action is not None
+    assert getattr(decide_service._llm, "last_provider", None) == "stub"
 

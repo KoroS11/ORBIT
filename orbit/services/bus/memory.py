@@ -77,6 +77,15 @@ class InProcessBus:
             if sub in self._subs:
                 self._subs.remove(sub)
 
+    def reset(self) -> None:
+        """Drain all subscriber queues so canceled replays do not leak stale events."""
+        for sub in list(self._subs):
+            while not sub.queue.empty():
+                try:
+                    sub.queue.get_nowait()
+                except Exception:
+                    break
+
     def close(self) -> None:
         for sub in self._subs:
             sub.closed = True

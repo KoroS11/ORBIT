@@ -70,6 +70,7 @@ class DecideService:
         self._llm = llm
         self._orbit = orbit
         self._tracer = tracer
+        self._kb = kb if kb is not None else getattr(llm, "_kb", None)
         raw_budget = (
             signal_budget_s
             if signal_budget_s is not None
@@ -86,7 +87,7 @@ class DecideService:
             from orbit.services.decide.tools import build_tool_registry
             from orbit.services.kb import KB
 
-            fallback_kb = kb if kb is not None else KB(entries=[])
+            fallback_kb = self._kb if self._kb is not None else KB(entries=[])
             tool_ctx, tools = build_tool_registry(
                 kb=fallback_kb, orbit=orbit, tracer=tracer
             )
@@ -121,11 +122,20 @@ class DecideService:
                     decision = await self._llm.decide(event)
             except TimeoutError:
                 log.warning(
-                    "decide: LLMClient.decide timed out after %.1fs (ORBIT_LLM_SIGNAL_BUDGET_S exceeded) for attribution=%s",
+                    "decide: per-signal LLM latency budget (%.1fs) exceeded for attribution=%s; falling back to stub decision",
                     self._signal_budget_s,
                     event.id,
                 )
-                continue
+                from orbit.services.kb import KB
+                from orbit.services.llm.stub import StubLLMClient
+
+                kb = self._kb if self._kb is not None else KB(entries=[])
+                stub = StubLLMClient(kb)
+                decision = await stub.decide(event)
+                if hasattr(self._llm, "fallback_count"):
+                    self._llm.fallback_count += 1
+                    self._llm.last_fallback_at = datetime.now(UTC).isoformat()
+                setattr(self._llm, "last_provider", "stub")
             except Exception:
                 log.exception(
                     "decide: LLMClient.decide failed for attribution=%s", event.id

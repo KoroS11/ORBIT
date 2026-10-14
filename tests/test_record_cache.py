@@ -5,9 +5,12 @@ Verifies that the offline seed cache recorder:
 2. Is resumable: re-running with an existing seed file makes zero new network calls.
 3. Stops cleanly on daily-quota 429 (RESOURCE_EXHAUSTED) without corrupting the file.
 4. Terminates when cache closure is achieved.
+5. Works with a slow mock transport, waiting for pipeline idle.
+6. Prunes stale keys that were not used during the final complete pass.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -33,12 +36,16 @@ def _gemini_mock_response(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 class MockRecordingTransport(httpx.AsyncBaseTransport):
-    def __init__(self, fail_on_call: int | None = None) -> None:
+    def __init__(self, fail_on_call: int | None = None, latency_s: float = 0.0) -> None:
         self.call_count: int = 0
         self.fail_on_call = fail_on_call
+        self.latency_s = latency_s
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.call_count += 1
+        if self.latency_s > 0:
+            await asyncio.sleep(self.latency_s)
+
         if self.fail_on_call is not None and self.call_count >= self.fail_on_call:
             # Simulate Gemini API 429 daily quota error body
             err_body = {
@@ -105,7 +112,7 @@ async def test_recorder_records_resumes_and_terminates(tmp_path: Path):
     transport = MockRecordingTransport()
 
     # Pass 1: Record beat47 scenario
-    total_entries, pass_counts, stage_stats = await run_recorder(
+    total_entries, pass_counts, keys_by_stage, is_closed = await run_recorder(
         scenarios=["beat47"],
         max_calls=50,
         max_passes=3,
@@ -119,6 +126,7 @@ async def test_recorder_records_resumes_and_terminates(tmp_path: Path):
     assert total_entries == 20
     assert transport.call_count == 20
     assert pass_counts == [20, 0]  # Pass 1 recorded 20, Pass 2 verified 0 new keys -> closed!
+    assert is_closed is True
 
     # Verify saved file structure
     saved = json.loads(seed_file.read_text(encoding="utf-8"))
@@ -131,7 +139,7 @@ async def test_recorder_records_resumes_and_terminates(tmp_path: Path):
 
     # Pass 2: Re-run with another transport on the same seed file -> Resumes with 0 calls!
     transport2 = MockRecordingTransport()
-    total_entries_2, pass_counts_2, _ = await run_recorder(
+    total_entries_2, pass_counts_2, _, is_closed_2 = await run_recorder(
         scenarios=["beat47"],
         max_calls=50,
         max_passes=3,
@@ -144,6 +152,7 @@ async def test_recorder_records_resumes_and_terminates(tmp_path: Path):
     assert total_entries_2 == 20
     assert transport2.call_count == 0  # Zero new network calls!
     assert pass_counts_2 == [0]       # Terminated in pass 1 because 0 new keys!
+    assert is_closed_2 is True
 
 
 @pytest.mark.asyncio
@@ -153,7 +162,7 @@ async def test_recorder_stops_cleanly_on_daily_quota_429(tmp_path: Path):
     # Fail on call 3 with 429 RESOURCE_EXHAUSTED
     transport = MockRecordingTransport(fail_on_call=3)
 
-    total_entries, pass_counts, _ = await run_recorder(
+    total_entries, pass_counts, _, is_closed = await run_recorder(
         scenarios=["beat47"],
         max_calls=50,
         max_passes=2,
@@ -168,6 +177,7 @@ async def test_recorder_stops_cleanly_on_daily_quota_429(tmp_path: Path):
     saved = json.loads(seed_file.read_text(encoding="utf-8"))
     assert len(saved) == 2
     assert total_entries == 2
+    assert is_closed is False
 
 
 @pytest.mark.asyncio
@@ -176,7 +186,7 @@ async def test_recorder_dry_run_writes_nothing_to_disk(tmp_path: Path):
     seed_file = tmp_path / "never_created_seed.json"
     transport = MockRecordingTransport()
 
-    total_disk_entries, pass_counts, stage_stats = await run_recorder(
+    total_disk_entries, pass_counts, keys_by_stage, is_closed = await run_recorder(
         scenarios=["beat47"],
         max_calls=50,
         max_passes=3,
@@ -194,9 +204,44 @@ async def test_recorder_dry_run_writes_nothing_to_disk(tmp_path: Path):
 
     # Closure simulation in memory: pass 1 discovers 20 missing, pass 2 verifies 0 new
     assert pass_counts == [20, 0]
+    assert is_closed is True
 
-    # Coverage stats unambiguous: expected=5, recorded=0, missing=5 per stage
-    beat_stats = stage_stats["beat47"]
-    assert beat_stats["attribute_primary"]["expected"] == 5
-    assert beat_stats["attribute_primary"]["recorded"] == 0
-    assert beat_stats["attribute_primary"]["missing"] == 5
+    # 5 unique keys discovered for attribute_primary
+    assert len(keys_by_stage["beat47"]["attribute_primary"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_recorder_slow_transport_and_prune(tmp_path: Path):
+    """Verify recorder with slow mock transport, idle wait, and --prune deleting stale keys."""
+    seed_file = tmp_path / "gemini_cache_seed_prune.json"
+
+    # Pre-populate seed with a stale key from an old window shape
+    stale_key = "stale_hash_from_old_collapsed_window_shape"
+    initial_data = {
+        stale_key: {
+            "response": {"actor": "OldRussia", "confidence": 0.5},
+            "metadata": {"scenario": "beat47", "stage": "attribute_primary"},
+        }
+    }
+    seed_file.write_text(json.dumps(initial_data, indent=2), encoding="utf-8")
+
+    # Slow transport: 150ms per call to simulate network delay
+    transport = MockRecordingTransport(latency_s=0.15)
+
+    total_entries, pass_counts, keys_by_stage, is_closed = await run_recorder(
+        scenarios=["beat47"],
+        max_calls=50,
+        max_passes=3,
+        seed_file=seed_file,
+        speed=10.0,
+        window_s=2.0,
+        transport=transport,
+        prune=True,
+    )
+
+    assert is_closed is True
+    # The stale key must have been pruned!
+    saved = json.loads(seed_file.read_text(encoding="utf-8"))
+    assert stale_key not in saved
+    assert len(saved) == 20
+    assert total_entries == 20
