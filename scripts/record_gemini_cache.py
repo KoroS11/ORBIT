@@ -133,6 +133,7 @@ class RecordingGeminiClient(GeminiLLMClient):
             rate_limiter=False if transport is not None else None,
             cache=False,       # Bypass local state cache
             seed_cache=False,  # Bypass built-in seed cache; we manage seed_data directly
+            live_enabled=True if (transport is not None or os.environ.get("ORBIT_GEMINI_LIVE", "").strip().lower() in {"1", "true", "yes", "on"}) else False,
         )
         self.seed_data = seed_data
         self.seed_file = seed_file
@@ -378,10 +379,20 @@ async def run_recorder(
     window_s: float = 2.0,
     transport: httpx.AsyncBaseTransport | None = None,
     prune: bool = False,
+    live: bool = False,
 ) -> tuple[int, list[int], dict[str, dict[str, set[str]]], bool]:
+    if live:
+        os.environ["ORBIT_GEMINI_LIVE"] = "1"
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not dry_run and not transport:
+        if not live and not (os.environ.get("ORBIT_GEMINI_LIVE", "").strip().lower() in {"1", "true", "yes", "on"}):
+            print(
+                "ERROR: scripts/record_gemini_cache.py refuses to run a live recording unless --live is passed.\n"
+                "Pass --live to run live Gemini calls, or --dry-run to simulate without network calls.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if not api_key:
             print("ERROR: GEMINI_API_KEY not found in environment or .env file.", file=sys.stderr)
             print("To discover expected calls without an API key, use --dry-run.", file=sys.stderr)
@@ -547,9 +558,25 @@ def main() -> None:
         action="store_true",
         help="Delete seed entries not used in the final complete pass (stale window shapes)",
     )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Enable live Gemini API calls for recording (sets ORBIT_GEMINI_LIVE=1 for this process)",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+
+    if not args.dry_run and not args.live:
+        print(
+            "ERROR: scripts/record_gemini_cache.py refuses to run a live recording unless --live is passed.\n"
+            "Pass --live to run live Gemini calls, or --dry-run to simulate without network calls.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if args.live:
+        os.environ["ORBIT_GEMINI_LIVE"] = "1"
 
     _, _, _, is_closed = asyncio.run(
         run_recorder(
@@ -562,10 +589,11 @@ def main() -> None:
             speed=args.speed,
             window_s=args.window,
             prune=args.prune,
+            live=args.live,
         )
     )
 
-    if not is_closed:
+    if not is_closed and not args.dry_run:
         print("ERROR: Recording did not achieve cache closure.", file=sys.stderr)
         sys.exit(1)
 

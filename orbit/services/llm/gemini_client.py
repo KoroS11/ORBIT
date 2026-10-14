@@ -50,6 +50,27 @@ RETRY_STATUS = {429, 500, 503}
 MAX_ATTEMPTS = 4
 
 
+class GeminiLiveDisabled(RuntimeError):
+    """Raised when a live Gemini call is attempted but ORBIT_GEMINI_LIVE is disabled."""
+
+
+def is_gemini_live_enabled(val: str | None = None) -> bool:
+    """Return True if ORBIT_GEMINI_LIVE is enabled (1, true, yes, on). Unset or other is False."""
+    if val is None:
+        val = os.environ.get("ORBIT_GEMINI_LIVE", "")
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+_LIVE_DISABLED_WARNED = False
+
+
+def _log_live_disabled_once() -> None:
+    global _LIVE_DISABLED_WARNED
+    if not _LIVE_DISABLED_WARNED:
+        log.info("gemini: live calls disabled (ORBIT_GEMINI_LIVE is off); falling back to stub on cache miss")
+        _LIVE_DISABLED_WARNED = True
+
+
 def _is_daily_quota_exhausted(resp: Any) -> bool:
     """Classify daily quota exhaustion strictly by quota ID in error.details.
 
@@ -480,6 +501,7 @@ class GeminiLLMClient(OllamaLLMClient):
         seed_cache: GeminiSeedCache | None | bool = None,
         circuit_breaker: GeminiCircuitBreaker | None = None,
         rate_limiter: GeminiRateLimiter | None | bool = None,
+        live_enabled: bool | None = None,
     ) -> None:
         # Deliberately skip OllamaLLMClient.__init__ (it configures an Ollama URL).
         self._kb = kb
@@ -532,16 +554,22 @@ class GeminiLLMClient(OllamaLLMClient):
         else:
             self._rate_limiter = get_process_rate_limiter()
 
+        if live_enabled is None:
+            self.live_enabled: bool = is_gemini_live_enabled()
+        else:
+            self.live_enabled = bool(live_enabled)
+
         self.last_provider: str = "gemini"
         self._current_call_name: str = "chat"
         self.cache_hits: int = 0
         self.seed_hits: int = 0
         self.live_calls: int = 0
         log.info(
-            "gemini: model=%s timeout=%.0fs thinking_budget=%s",
+            "gemini: model=%s timeout=%.0fs thinking_budget=%s live_enabled=%s",
             self._model,
             self._timeout_s,
             self._thinking_budget,
+            self.live_enabled,
         )
 
     @property
@@ -597,12 +625,19 @@ class GeminiLLMClient(OllamaLLMClient):
                 self.seed_hits += 1
                 return seed_cached
 
-        # 3. Circuit breaker check
+        # 3. Live gate check (before circuit breaker and rate limiter)
+        if not self.live_enabled:
+            _log_live_disabled_once()
+            raise GeminiLiveDisabled(
+                f"gemini: live calls disabled (ORBIT_GEMINI_LIVE is off; call={effective_call})"
+            )
+
+        # 4. Circuit breaker check
         if self._circuit_breaker.is_open():
             log.warning("gemini: circuit breaker is open; skipping API call (call=%s)", effective_call)
             raise RuntimeError("gemini: circuit breaker open (RESOURCE_EXHAUSTED)")
 
-        # 4. Client-side rate limiter check: wait turn or raise if wait > max_queue_wait_s
+        # 5. Client-side rate limiter check: wait turn or raise if wait > max_queue_wait_s
         if self._rate_limiter is not None:
             await self._rate_limiter.acquire()
 
@@ -775,6 +810,10 @@ class FallbackLLMClient:
         return self.fallback_count
 
     @property
+    def live_enabled(self) -> bool:
+        return bool(getattr(self._primary, "live_enabled", False))
+
+    @property
     def current_provider(self) -> str:
         return self.last_provider
 
@@ -783,6 +822,14 @@ class FallbackLLMClient:
             result = await getattr(self._primary, name)(*args)
             self.last_provider = getattr(self._primary, "last_provider", "gemini")
             return result
+        except GeminiLiveDisabled:
+            _log_live_disabled_once()
+            self.fallback_count += 1
+            from datetime import datetime, timezone
+
+            self.last_fallback_at = datetime.now(timezone.utc).isoformat()
+            self.last_provider = "stub"
+            return await getattr(self._fallback, name)(*args)
         except Exception as exc:  # noqa: BLE001 - CancelledError is not an Exception
             log.warning(
                 "llm: %s failed (%s: %s); using fallback",

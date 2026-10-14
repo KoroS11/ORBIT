@@ -130,6 +130,7 @@ ORBIT_GEMINI_MODEL=gemini-3.1-flash-lite
 ORBIT_GEMINI_TIMEOUT_S=60
 ORBIT_GEMINI_THINKING_BUDGET=0
 ORBIT_LLM_FALLBACK=1
+ORBIT_GEMINI_LIVE=1
 
 # Quota notice (read from Google AI Studio on 13 Oct 2026 for this project):
 # - gemini-3.1-flash-lite: 15 RPM, 500 RPD
@@ -144,6 +145,23 @@ OMP_NUM_THREADS=2
 # Persisted state location inside container
 ORBIT_STATE_DIR=/app/data/state
 ```
+
+#### Environment Variables Reference
+| Variable | Description | Production Value | Local Development |
+|---|---|---|---|
+| `DOMAIN` | Domain configuration for Caddy automatic TLS | `orbit-hq.duckdns.org` | Unset |
+| `ORBIT_ALLOWED_ORIGINS` | Allowed CORS origins | `https://orbit-hq.duckdns.org` | `http://localhost:5173` |
+| `ORBIT_LLM` | LLM provider selection (`gemini`, `stub`, `anthropic`, `ollama`) | `gemini` | `gemini` or `stub` |
+| `GEMINI_API_KEY` | Google AI Studio API key | Production key | Local key |
+| `ORBIT_GEMINI_MODEL` | Gemini model name | `gemini-3.1-flash-lite` | `gemini-3.1-flash-lite` |
+| `ORBIT_GEMINI_TIMEOUT_S` | Timeout in seconds per API request | `60` | `60` |
+| `ORBIT_GEMINI_THINKING_BUDGET` | Thinking token budget (0 = disabled) | `0` | `0` |
+| `ORBIT_LLM_FALLBACK` | Fallback to stub on error | `1` | `1` |
+| `ORBIT_GEMINI_LIVE` | Gate live Gemini calls (`1`/`true`/`yes`/`on` = ON; unset or other = OFF) | `1` (production only) | Leave unset locally |
+| `ORBIT_ATTRIB_WINDOW_S` | Attribution window size in seconds | `2.0` | `2.0` |
+| `ORBIT_LOG_LEVEL` | Logging level | `INFO` | `INFO` |
+| `OMP_NUM_THREADS` | OpenMP thread concurrency ceiling | `2` | `2` |
+| `ORBIT_STATE_DIR` | Persisted state volume directory | `/app/data/state` | `./data/state` |
 
 > **Security Warning**: `deploy.env` contains API keys and credentials. It is already in `.gitignore` and `.dockerignore`. Never commit `deploy.env` to Git.
 

@@ -245,3 +245,72 @@ async def test_recorder_slow_transport_and_prune(tmp_path: Path):
     assert stale_key not in saved
     assert len(saved) == 20
     assert total_entries == 20
+
+
+def test_recorder_refuses_live_run_without_live_flag():
+    """record_gemini_cache.py refuses to run live recording unless --live is passed."""
+    import os
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "scripts/record_gemini_cache.py", "--scenarios", "beat47"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "ORBIT_GEMINI_LIVE": ""},
+    )
+    assert result.returncode != 0
+    assert "refuses to run a live recording unless --live is passed" in result.stderr
+
+
+def test_recorder_dry_run_works_without_live_flag():
+    """record_gemini_cache.py allows --dry-run without --live."""
+    import os
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/record_gemini_cache.py",
+            "--dry-run",
+            "--scenarios",
+            "beat47",
+            "--seed-file",
+            "data/seed/gemini_cache_seed.json",
+            "--max-passes",
+            "1",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "ORBIT_GEMINI_LIVE": ""},
+    )
+    assert result.returncode == 0
+    assert "TOTAL" in result.stdout
+
+
+def test_recorder_live_flag_sets_env():
+    """--live flag sets ORBIT_GEMINI_LIVE=1 in recorder process."""
+    import os
+    import subprocess
+    import sys
+
+    code = "\n".join([
+        "import sys, os",
+        "sys.argv = ['scripts/record_gemini_cache.py', '--live', '--dry-run', '--max-passes', '1']",
+        "import scripts.record_gemini_cache as rgc",
+        "from unittest.mock import patch",
+        "with patch('asyncio.run', return_value=(0, [], {}, True)):",
+        "    try:",
+        "        rgc.main()",
+        "    except SystemExit:",
+        "        pass",
+        "assert os.environ.get('ORBIT_GEMINI_LIVE') == '1', f'got {os.environ.get(\"ORBIT_GEMINI_LIVE\")}'",
+    ])
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "ORBIT_GEMINI_LIVE": ""},
+    )
+    assert result.returncode == 0, f"Failed: stdout={result.stdout} stderr={result.stderr}"

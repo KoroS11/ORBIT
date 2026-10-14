@@ -682,6 +682,8 @@ class StubLLMClient:
     decision logic stays grounded in the same KB the attribution cites.
     """
 
+    live_enabled: bool = False
+
     def __init__(self, kb: KB) -> None:
         self._kb = kb
 

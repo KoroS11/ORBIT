@@ -83,6 +83,7 @@ async def test_gemini_valid_response_parses_and_runs_validators() -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_MockTransport(),
+        live_enabled=True,
     )
     attribution = await client.attribute([_anomaly()])
 
@@ -124,6 +125,7 @@ async def test_gemini_429_retry_then_succeeds(monkeypatch) -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_RetryTransport(),
+        live_enabled=True,
     )
     attribution = await client.attribute([_anomaly()])
 
@@ -152,6 +154,7 @@ async def test_gemini_persistent_500_fallback_to_stub() -> None:
             api_key=FAKE_KEY,
             model="gemini-2.5-flash",
             transport=_Error500Transport(),
+            live_enabled=True,
         )
         stub = StubLLMClient(kb)
         fallback_client = FallbackLLMClient(primary, stub)
@@ -185,6 +188,7 @@ async def test_gemini_key_in_header_not_in_url() -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_CaptureTransport(),
+        live_enabled=True,
     )
     await client.attribute([_anomaly()])
 
@@ -218,6 +222,7 @@ async def test_gemini_thinking_budget_sent_when_set() -> None:
         model="gemini-2.5-flash",
         thinking_budget=0,
         transport=_CaptureTransport(),
+        live_enabled=True,
     )
     await client.attribute([_anomaly()])
 
@@ -247,6 +252,7 @@ async def test_gemini_thinking_budget_absent_when_unset(monkeypatch) -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_CaptureTransport(),
+        live_enabled=True,
     )
     await client.attribute([_anomaly()])
 
@@ -282,6 +288,7 @@ async def test_gemini_prompt_cache_hit_and_miss(tmp_path: Path) -> None:
         model="gemini-2.5-flash",
         transport=_CountingTransport(),
         cache=cache,
+        live_enabled=True,
     )
 
     test_anomaly = _anomaly()
@@ -329,6 +336,7 @@ async def test_gemini_provider_tags_in_fallback() -> None:
             api_key=FAKE_KEY,
             model="gemini-2.5-flash",
             transport=_Error429Transport(),
+            live_enabled=True,
         )
         stub = StubLLMClient(kb)
         fallback = FallbackLLMClient(primary, stub)
@@ -442,6 +450,7 @@ async def test_circuit_breaker_trips_on_daily_quota_and_skips_retries(monkeypatc
         model="gemini-2.5-flash",
         transport=_DailyExhaustionTransport(),
         circuit_breaker=breaker,
+        live_enabled=True,
     )
     stub = StubLLMClient(kb)
     fallback = FallbackLLMClient(primary, stub)
@@ -517,6 +526,7 @@ async def test_per_minute_429_keeps_backoff_and_does_not_trip_circuit_breaker(mo
         model="gemini-2.5-flash",
         transport=_PerMinuteRateLimitTransport(),
         circuit_breaker=breaker,
+        live_enabled=True,
     )
 
     attr = await primary.attribute([_anomaly()])
@@ -572,6 +582,7 @@ async def test_ambiguous_429_keeps_normal_retries_and_does_not_trip_circuit_brea
         model="gemini-2.5-flash",
         transport=_Ambiguous429Transport(),
         circuit_breaker=breaker,
+        live_enabled=True,
     )
 
     attr = await primary.attribute([_anomaly()])
@@ -602,6 +613,7 @@ async def test_gemini_call_succeeded_log_emitted(caplog) -> None:
         api_key=FAKE_KEY,
         model="gemini-3.1-flash-lite",
         transport=_SuccessTransport(),
+        live_enabled=True,
     )
 
     with caplog.at_level(logging.INFO):
@@ -627,6 +639,7 @@ async def test_gemini_429_warning_log_emitted(caplog) -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_RateLimitedTransport(),
+        live_enabled=True,
     )
 
     with caplog.at_level(logging.WARNING):
@@ -659,6 +672,7 @@ async def test_gemini_timeout_warning_log_emitted(caplog) -> None:
         api_key=FAKE_KEY,
         model="gemini-2.5-flash",
         transport=_TimeoutTransport(),
+        live_enabled=True,
     )
 
     primary = Attribution(
@@ -724,6 +738,7 @@ async def test_breaker_open_returns_cached_answer_with_gemini_cache_provider(tmp
         transport=_Transport(),
         circuit_breaker=breaker,
         cache=cache,
+        live_enabled=True,
     )
     fallback = FallbackLLMClient(primary, StubLLMClient(_kb()))
 
@@ -964,6 +979,7 @@ async def test_lookup_order_state_cache_seed_live_stub(tmp_path: Path):
         transport=_MockTransport(),
         cache=state_cache,
         seed_cache=seed_cache,
+        live_enabled=True,
     )
     fallback = FallbackLLMClient(primary, StubLLMClient(kb))
 
@@ -1189,6 +1205,7 @@ async def test_rate_limiter_exceeded_falls_back_to_stub():
         cache=False,
         seed_cache=False,
         rate_limiter=limiter,
+        live_enabled=True,
     )
     fallback = FallbackLLMClient(client, StubLLMClient(kb))
 
@@ -1198,6 +1215,226 @@ async def test_rate_limiter_exceeded_falls_back_to_stub():
     assert fallback.last_provider == "stub"
     assert fallback.stub_fallbacks == 1
     assert fallback.fallback_count == 1
+
+
+# ---- Live Gate Tests (ORBIT_GEMINI_LIVE) -----------------------------------
+
+
+def test_is_gemini_live_enabled_parsing(monkeypatch) -> None:
+    """Env parsing helper recognizes 1/true/yes/on as True and anything else as False."""
+    from orbit.services.llm.gemini_client import is_gemini_live_enabled
+
+    for val in ["1", "true", "TRUE", "yes", "YES", "on", "ON", " 1 ", " true "]:
+        assert is_gemini_live_enabled(val) is True
+
+    for val in ["", "0", "false", "no", "off", "invalid", "2"]:
+        assert is_gemini_live_enabled(val) is False
+
+    monkeypatch.setenv("ORBIT_GEMINI_LIVE", "1")
+    assert is_gemini_live_enabled() is True
+    monkeypatch.setenv("ORBIT_GEMINI_LIVE", "0")
+    assert is_gemini_live_enabled() is False
+    monkeypatch.delenv("ORBIT_GEMINI_LIVE", raising=False)
+    assert is_gemini_live_enabled() is False
+
+
+async def test_gemini_live_disabled_with_cache_hit_returns_recorded_answer_zero_transport_calls(tmp_path: Path) -> None:
+    """When live is disabled (OFF), a state cache hit returns the recorded answer with zero transport calls."""
+    from orbit.services.llm.gemini_client import GeminiPromptCache
+
+    cache_file = tmp_path / "cache.json"
+    cache = GeminiPromptCache(cache_file=cache_file)
+    canned = {
+        "actor": "China",
+        "confidence": 0.82,
+        "evidence": ["from state cache"],
+        "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+    }
+
+    call_count = 0
+
+    class _ZeroTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise AssertionError("Transport must not be called on cache hit when live is disabled!")
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_ZeroTransport(),
+        cache=cache,
+        seed_cache=False,
+        live_enabled=False,
+    )
+
+    user_str = "test_user_prompt"
+    prompt_str = (
+        f"{user_str}\n\n"
+        "Reply with a single JSON object that conforms to this schema:\n"
+        f"```json\n{json.dumps(Attribution.model_json_schema(), indent=2)}\n```"
+    )
+    key = cache.compute_key(
+        model=client._model,
+        system="test_system",
+        prompt=prompt_str,
+        temperature=0.2,
+        thinking_budget=client._thinking_budget,
+        schema=Attribution.model_json_schema(),
+    )
+    cache.set(key, canned)
+
+    # Directly test _chat lookup
+    resp = await client._chat(
+        system="test_system",
+        user=user_str,
+        schema=Attribution.model_json_schema(),
+        call_name="attribute_primary",
+    )
+    assert resp["actor"] == "China"
+    assert client.cache_hits == 1
+    assert client.live_calls == 0
+    assert client.last_provider == "gemini-cache"
+    assert call_count == 0
+
+
+async def test_gemini_live_disabled_with_seed_hit_returns_recorded_answer_zero_transport_calls(tmp_path: Path) -> None:
+    """When live is disabled (OFF), a seed cache hit returns recorded answer with zero transport calls."""
+    from orbit.services.llm.gemini_client import GeminiSeedCache, compute_seed_key
+
+    seed_file = tmp_path / "seed.json"
+    canned = {
+        "actor": "Russia",
+        "confidence": 0.79,
+        "evidence": ["from seed cache"],
+        "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+    }
+
+    user_str = _anomaly().model_dump_json()
+    full_prompt = (
+        f"{user_str}\n\n"
+        "Reply with a single JSON object that conforms to this schema:\n"
+        f"```json\n{json.dumps(Attribution.model_json_schema(), indent=2)}\n```"
+    )
+    seed_key = compute_seed_key(
+        system="test_system",
+        prompt=full_prompt,
+        schema=Attribution.model_json_schema(),
+    )
+    seed_file.write_text(json.dumps({seed_key: {"response": canned, "metadata": {}}}), encoding="utf-8")
+    seed_cache = GeminiSeedCache(seed_file=seed_file)
+
+    call_count = 0
+
+    class _ZeroTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise AssertionError("Transport must not be called on seed hit when live is disabled!")
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_ZeroTransport(),
+        cache=False,
+        seed_cache=seed_cache,
+        live_enabled=False,
+    )
+
+    resp = await client._chat(
+        system="test_system",
+        user=user_str,
+        schema=Attribution.model_json_schema(),
+        call_name="attribute_primary",
+    )
+    assert resp["actor"] == "Russia"
+    assert client.seed_hits == 1
+    assert client.live_calls == 0
+    assert client.last_provider == "gemini-seed"
+    assert call_count == 0
+
+
+async def test_gemini_live_disabled_with_miss_gives_stub_zero_transport_calls() -> None:
+    """When live is disabled (OFF) and cache misses, FallbackLLMClient answers with stub, 0 transport calls, and breaker is NOT tripped."""
+    from orbit.services.llm.gemini_client import GeminiCircuitBreaker, GeminiLiveDisabled
+
+    call_count = 0
+
+    class _ZeroTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise AssertionError("Transport must not be called on miss when live is disabled!")
+
+    breaker = GeminiCircuitBreaker(cooldown_minutes=10)
+    kb = _kb()
+    primary = GeminiLLMClient(
+        kb,
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_ZeroTransport(),
+        cache=False,
+        seed_cache=False,
+        circuit_breaker=breaker,
+        live_enabled=False,
+    )
+
+    # 1. Direct call raises GeminiLiveDisabled without touching network or tripping breaker
+    with pytest.raises(GeminiLiveDisabled):
+        await primary.attribute_primary([_anomaly()])
+
+    assert breaker.is_open() is False
+    assert call_count == 0
+
+    # 2. Wrapped in FallbackLLMClient: catches GeminiLiveDisabled, returns stub, counts as stub fallback
+    stub = StubLLMClient(kb)
+    fallback = FallbackLLMClient(primary, stub)
+
+    attr = await fallback.attribute([_anomaly()])
+    assert isinstance(attr, Attribution)
+    assert fallback.last_provider == "stub"
+    assert fallback.stub_fallbacks == 1
+    assert fallback.live_calls == 0
+    assert fallback.seed_hits == 0
+    assert fallback.cache_hits == 0
+    assert breaker.is_open() is False
+    assert call_count == 0
+
+
+async def test_gemini_live_enabled_on_keeps_live_behavior() -> None:
+    """When live is enabled (ON), cache miss proceeds to transport and succeeds."""
+    call_count = 0
+    canned = {
+        "actor": "China",
+        "confidence": 0.85,
+        "evidence": ["live call verified"],
+        "kb_citations": ["kb-rpo-ambiguity-001", UNCERTAINTY_ANCHOR],
+    }
+
+    class _LiveTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(200, json=_gemini_response(canned))
+
+    client = GeminiLLMClient(
+        _kb(),
+        api_key=FAKE_KEY,
+        model="gemini-3.1-flash-lite",
+        transport=_LiveTransport(),
+        cache=False,
+        seed_cache=False,
+        live_enabled=True,
+    )
+
+    attr = await client.attribute([_anomaly()])
+    assert attr.actor == "China"
+    assert call_count == 1
+    assert client.live_calls == 1
+    assert client.last_provider == "gemini"
+
 
 
 
