@@ -211,19 +211,7 @@ async function main() {
     });
     console.log(`army-chain -> seed_hits: ${s4_hits}, stub_fallbacks: ${s4_stub}, live_calls: ${s4_live}, provider: ${h4_after.active_provider}`);
 
-    // Wait for the badge to poll /health (up to 30s) or check for badge content
-    console.log('\nWaiting for DataProvenanceBadge to refresh...');
-    const badgeEl = page.locator('.data-provenance-badge');
-    await badgeEl.waitFor({ state: 'visible', timeout: 10000 });
-    // Let's wait up to 31s so the interval fires
-    await sleep(31000);
-
-    const badgePng = path.join(ARTIFACT_DIR, 'provenance_badge.png');
-    await badgeEl.screenshot({ path: badgePng });
-    console.log(`Saved provenance badge screenshot to ${badgePng}`);
-
-    const badgeText = await badgeEl.innerText();
-    console.log(`Badge rendered text: ${JSON.stringify(badgeText)}`);
+    console.log('\nProvenance bar has been removed as per specification.');
   } finally {
     await browser.close();
   }
