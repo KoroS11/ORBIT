@@ -86,6 +86,9 @@ jobs:
           file: ./Dockerfile.frontend
           platforms: linux/amd64
           push: true
+          build-args: |
+            VITE_CESIUM_ION_TOKEN=${{ secrets.VITE_CESIUM_ION_TOKEN }}
+            VITE_ARCGIS_API_KEY=${{ secrets.VITE_ARCGIS_API_KEY }}
           tags: |
             ghcr.io/koros11/orbit-frontend:latest
             ghcr.io/koros11/orbit-frontend:${{ github.sha }}

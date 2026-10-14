@@ -876,8 +876,16 @@ export function AorMap({
       return
     }
 
-    const imageryTileUrl =
+    const rawKey = import.meta.env.VITE_ARCGIS_API_KEY?.trim()
+    const validKey =
+      rawKey && !rawKey.startsWith('your-') && rawKey !== 'placeholder'
+        ? rawKey
+        : null
+    const publicTileUrl =
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    const imageryTileUrl = validKey
+      ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(validKey)}`
+      : publicTileUrl
 
     const map = new maplibregl.Map({
       attributionControl: false,
@@ -944,6 +952,17 @@ export function AorMap({
     resizeObserver.observe(containerRef.current)
 
     mapRef.current = map
+
+    map.on('error', (e) => {
+      // If a configured token is rejected, seamlessly fall back to public unauthenticated tiles
+      if (validKey && e.error && (String(e.error).includes('403') || String(e.error).includes('401'))) {
+        const source = map.getSource('esriWorldImagery') as maplibregl.RasterTileSource | undefined
+        if (source && typeof source.setTiles === 'function') {
+          source.setTiles([publicTileUrl])
+        }
+      }
+    })
+
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),

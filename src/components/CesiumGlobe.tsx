@@ -575,7 +575,11 @@ export function CesiumGlobe({
       viewer.imageryLayers.add(esriLayer)
     }
 
-    if (token) {
+    const isTokenConfigured = Boolean(
+      token && !token.startsWith('your-') && token !== 'placeholder',
+    )
+
+    if (isTokenConfigured) {
       Ion.defaultAccessToken = token
       const ionLayer = ImageryLayer.fromProviderAsync(
         createWorldImageryAsync({
