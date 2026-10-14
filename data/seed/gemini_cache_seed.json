@@ -1,1 +1,421 @@
-{}
+{
+  "5d1bba84bb7ab8185face5901739a5bdc98aeb16bc5eb52ea3eddc11d3dd41a7": {
+    "response": {
+      "actor": "Iran",
+      "confidence": 0.72,
+      "doctrine_match": "kb-iran-proxy-uas-001",
+      "evidence": [
+        "Terrestrial-segment OSINT reporting on Iranian missile and UAS proliferation is consistent with the strategic context documented in kb-iran-proxy-uas-001.",
+        "Link-segment overhead warning latency increases and refresh rate degradation are assessed as consistent with Iranian counter-C5ISR tradecraft (kb-iran-proxy-uas-001).",
+        "SDA-domain counterspace capability reporting corroborates the link-segment degradation, aligning with the Iranian electronic warfare and cyber patterns described in kb-iran-proxy-uas-001.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests continued degradation of link-segment C5ISR services and potential escalation to terrestrial-segment cyber probing as part of the Iranian counter-C5ISR pattern.",
+      "kb_citations": [
+        "kb-iran-proxy-uas-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:18:35.165910+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "c7b9dd00281ca5289319b69b89f278166c831108d1491d1a7ead6a8a8219922c": {
+    "response": {
+      "actor": "Multi-actor",
+      "confidence": 0.72,
+      "doctrine_match": null,
+      "evidence": [
+        "Orbital-segment RPO close-approach events are assessed as consistent with PRC co-orbital tradecraft (kb-rpo-ambiguity-001).",
+        "Link-segment SATCOM degradation is assessed as consistent with Russian EW jamming patterns (kb-satcom-jamming-001).",
+        "The clustering of orbital and link-segment anomalies suggests a multi-actor synchronization of counterspace effects.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests sustained inspector dwell in the orbital segment concurrent with continued link-segment interference.",
+      "kb_citations": [
+        "kb-rpo-ambiguity-001",
+        "kb-satcom-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "beat47",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:18:49.753960+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "08af39ff399e51cc5fd5717f1a15be4e89f0a377c7e5e3f38195361561d10cc8": {
+    "response": {
+      "actor": "Multi-actor",
+      "confidence": 0.72,
+      "doctrine_match": null,
+      "evidence": [
+        "Orbital-segment RPO screening alert near friendly LEO assets is consistent with patterns documented in kb-rpo-ambiguity-001.",
+        "Link-segment RF interference against UAS C2 links and SATCOM queue pressure are consistent with EW tradecraft documented in kb-gps-jamming-001.",
+        "The temporal correlation between the orbital proximity event and the subsequent link-segment degradation suggests a coordinated multi-domain effect.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests sustained link-segment interference and potential continued RPO dwell time to maximize operational pressure on friendly reachback.",
+      "kb_citations": [
+        "kb-rpo-ambiguity-001",
+        "kb-gps-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:01.755855+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "696ea878a9f4d2da3288392af8cef8efb1d2bf863e25a693e357684b3c17bbff": {
+    "response": {
+      "alternative_actor": "Russia",
+      "objections": [
+        "The observed link-segment degradation (latency/refresh) is generic and lacks specific Iranian-attributed RF signatures or localized EW geolocation.",
+        "The evidence relies heavily on strategic context (OSINT/KB) rather than tactical, actor-specific technical indicators.",
+        "The pattern of overhead warning degradation is consistent with broader regional electronic warfare capabilities not exclusive to Iran."
+      ],
+      "confidence_delta": -0.07,
+      "rationale": "While the activity aligns with the Iranian doctrine, the evidence is primarily circumstantial and lacks unique technical attribution markers, necessitating a slight reduction in confidence to account for potential Russian interference or regional non-state actors."
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "attribute_redteam",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:14.504702+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "3c26c7b8df0aec2ea64689730d577e86085871e08c4915b8cabd442598ac125e": {
+    "response": {
+      "actor": "Iran",
+      "confidence": 0.65,
+      "doctrine_match": "kb-iran-proxy-uas-001",
+      "evidence": [
+        "Terrestrial-segment OSINT reporting on Iranian missile and UAS proliferation is consistent with the strategic context documented in kb-iran-proxy-uas-001.",
+        "Link-segment overhead warning latency increases and refresh rate degradation are consistent with the pattern associated with Iranian counter-C5ISR tradecraft (kb-iran-proxy-uas-001).",
+        "SDA-domain counterspace capability reporting corroborates the link-segment degradation, aligning with the Iranian electronic warfare and cyber patterns described in kb-iran-proxy-uas-001.",
+        "Red-team flagged Russian alternative; primary KB match holds, though evidence lacks unique technical markers; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests continued degradation of link-segment C5ISR services and potential escalation to terrestrial-segment cyber probing as part of the Iranian counter-C5ISR pattern.",
+      "kb_citations": [
+        "kb-iran-proxy-uas-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "reconcile",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:20.589863+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "fce1a057a3ad91ef4b3ab0d6273f8c21c88b68d520bbe8fe38fe1af085e60da2": {
+    "response": {
+      "alternative_actor": "Russia",
+      "objections": [
+        "The primary assumes multi-actor synchronization without evidence of coordination or shared command-and-control.",
+        "The orbital RPO event could be a single-actor capability demonstration by Russia, which also possesses the EW assets involved in the link-segment degradation."
+      ],
+      "confidence_delta": -0.08,
+      "rationale": "The attribution to 'Multi-actor' relies on an assumption of synchronization that lacks specific evidence; a single-actor hypothesis (Russia) is equally plausible given their demonstrated capability in both domains."
+    },
+    "metadata": {
+      "scenario": "beat47",
+      "stage": "attribute_redteam",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:28.932380+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "f2d071bc293f485266e1d196698ac5d4cc0ab690098c76affc1a52fa3123a4a8": {
+    "response": {
+      "alternative_actor": "Russia",
+      "objections": [
+        "The primary relies on disparate KB entries (China for RPO, Russia for EW) to justify a 'Multi-actor' attribution without evidence of coordination.",
+        "The temporal correlation between the RPO event and the RF interference is suggestive but lacks a causal link or shared command-and-control indicator.",
+        "The EW tradecraft described is highly characteristic of Russian tactical doctrine, potentially making the RPO event a coincidental or secondary observation."
+      ],
+      "confidence_delta": -0.08,
+      "rationale": "The attribution to 'Multi-actor' assumes a level of strategic coordination that is not explicitly supported by the signals; the evidence is more consistent with a single-actor (likely Russian) opportunistic engagement or coincidental activity."
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "attribute_redteam",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:41.896796+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "5e936d9a9742679cf69f8e2520b32e272873b6f4aab16086b9855b7a4122754d": {
+    "response": {
+      "actor": "Multi-actor",
+      "confidence": 0.64,
+      "doctrine_match": null,
+      "evidence": [
+        "Orbital-segment RPO screening alert is consistent with patterns documented in kb-rpo-ambiguity-001.",
+        "Link-segment RF interference and SATCOM queue pressure are consistent with EW tradecraft documented in kb-gps-jamming-001.",
+        "Red-team flagged potential for single-actor Russian engagement; primary multi-actor assessment maintained with reduced confidence due to lack of explicit coordination evidence.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests sustained link-segment interference and potential continued RPO dwell time to maximize operational pressure on friendly reachback.",
+      "kb_citations": [
+        "kb-rpo-ambiguity-001",
+        "kb-gps-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "reconcile",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:46.922280+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "b9dd62e430c4da8513c917c8e1492d65d40714700f7e6ab5da2bb1b72a9c3a34": {
+    "response": {
+      "action": "space_link_interdiction_request",
+      "target": "brigade_c5isr_link",
+      "rationale": "Activity consistent with Iran prompts a request for space link interdiction to preserve brigade C5ISR connectivity against ongoing degradation.",
+      "authority": "request",
+      "request_packet": {
+        "to": "CJFSCC",
+        "supporting_supported": "brigade-to-CJFSCC",
+        "requested_effect": "link-segment interdiction",
+        "justification": "Persistent SATCOM degradation consistent with Iranian counter-C5ISR tradecraft necessitates link interdiction to maintain operational integrity; effect is reversible and limited to the link segment.",
+        "actor": "Iran",
+        "confidence": 0.65,
+        "kb_citations": [
+          "kb-iran-proxy-uas-001",
+          "kb-attribution-uncertainty-001"
+        ],
+        "reversibility": "reversible"
+      }
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "decide",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:53.726933+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "3423d18f996062653f3c6a1274d51db9fabcc43cb3a7a7a5d83d08558d970f4f": {
+    "response": {
+      "actor": "Iran",
+      "confidence": 0.78,
+      "doctrine_match": "kb-iran-proxy-uas-001",
+      "evidence": [
+        "Link-segment RF interference against UAS telemetry is consistent with Iranian counter-C5ISR tradecraft documented in kb-iran-proxy-uas-001.",
+        "Terrestrial-segment GNSS spoofing affecting drone coordinates corroborates the link-segment interference, aligning with the multi-domain pattern described in kb-iran-proxy-uas-001.",
+        "The concurrent use of RF interference and PNT spoofing against tactical UAS assets is assessed as consistent with Iranian or Iranian-proxy activity.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests the adversary may continue to pair link-segment interference with PNT spoofing to further degrade target-quality coordinate confidence for maneuver elements.",
+      "kb_citations": [
+        "kb-iran-proxy-uas-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:19:56.415800+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "f430b753d933845320ea908f35bcd5cfb047779918771fa8f6e217624f1cee7c": {
+    "response": {
+      "alternative_actor": "Russia",
+      "objections": [
+        "The observed GNSS spoofing and RF interference patterns are highly generic and frequently attributed to Russian tactical EW units in various theaters.",
+        "The primary relies heavily on kb-iran-proxy-uas-001, but the specific signal characteristics (1.7 GHz band) are also consistent with Russian R-330Zh Zhitel or similar systems."
+      ],
+      "confidence_delta": -0.08,
+      "rationale": "While the activity aligns with Iranian doctrine, the lack of unique, non-generic indicators makes Russian tactical EW a plausible alternative, necessitating a slight reduction in confidence."
+    },
+    "metadata": {
+      "scenario": "iran_counter_c5isr_brigade",
+      "stage": "attribute_redteam",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:00.571752+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "f91667c4f022f27be9fe2f9f73b23972c69ffc17a773992f8ee2ae5265a8fff0": {
+    "response": {
+      "actor": "Multi-actor",
+      "confidence": 0.64,
+      "doctrine_match": null,
+      "evidence": [
+        "Orbital-segment RPO close-approach events are assessed as consistent with PRC co-orbital tradecraft (kb-rpo-ambiguity-001).",
+        "Link-segment SATCOM degradation is consistent with Russian EW jamming patterns (kb-satcom-jamming-001).",
+        "Red-team flagged Russia as a single-actor alternative; however, the primary KB-grounded multi-actor assessment remains the most robust interpretation of the distinct domain-specific signatures.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests sustained inspector dwell in the orbital segment concurrent with continued link-segment interference.",
+      "kb_citations": [
+        "kb-rpo-ambiguity-001",
+        "kb-satcom-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "beat47",
+      "stage": "reconcile",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:08.718287+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "90bf052bf93f983a3216ff8fba9f8e9c652598d87114bb575c5c1b0cbeb27961": {
+    "response": {
+      "action": "passive_defense",
+      "target": "brigade-c2-link-mesh",
+      "rationale": "Activity consistent with multi-actor engagement prompts passive defense measures to preserve brigade BLOS and ISR connectivity.",
+      "authority": "local",
+      "request_packet": null
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "decide",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:20.547328+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "250eb41f4be58eebcfee211c682785aa00a8bba485d698bd1849904ca3c955ca": {
+    "response": {
+      "actor": "Russia",
+      "confidence": 0.76,
+      "doctrine_match": "kb-gps-jamming-001",
+      "evidence": [
+        "Link-segment GNSS spoofing affecting UAS-LINK-GROUP-B is consistent with Russian EW tradecraft documented in kb-gps-jamming-001.",
+        "Terrestrial-segment credential probing against the BDE-C2-GATEWAY during the active spoofing window is assessed as consistent with Russian multi-domain operational patterns.",
+        "The correlation of PNT degradation and concurrent cyber access attempts reinforces the attribution to a single threat actor cluster.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests the adversary may attempt to exploit the telemetry-forwarder service while the brigade is occupied with PNT recovery.",
+      "kb_citations": [
+        "kb-gps-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:26.297598+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "2e533ecce4fd0fd5ca2ebd1f3384b182482ed7260d7e1fe2a7699cb165488a9d": {
+    "response": {
+      "actor": "Russia",
+      "confidence": 0.76,
+      "doctrine_match": "kb-satcom-jamming-001",
+      "evidence": [
+        "Orbital-segment link margin degradation on ORBIT-LEO-07 is consistent with the effects described in kb-satcom-jamming-001.",
+        "Link-segment wideband RF energy spikes at GATEWAY-GUAM-3 are assessed as consistent with Russian SATCOM jamming tradecraft documented in kb-satcom-jamming-001.",
+        "The correlation of orbital proximity events with concurrent link-segment RF interference is a pattern associated with Russian counterspace operations per kb-satcom-jamming-001.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests sustained link-segment interference during orbital dwell periods to maximize degradation of beyond-line-of-sight communications.",
+      "kb_citations": [
+        "kb-satcom-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "beat47",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:48.721796+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "8a4db77122cd552fc375af1a151d9a4f5e419ab94211bb6c8ae18d13ab94a723": {
+    "response": {
+      "action": "active_defense_escort",
+      "target": "threatened_geo_asset",
+      "rationale": "Activity consistent with multi-actor RPO and SATCOM interference prompts an active defense escort request to preserve brigade primary BLOS during the concurrent close-approach and link-degradation window.",
+      "authority": "request",
+      "request_packet": {
+        "to": "CJFSCC",
+        "supporting_supported": "brigade-supported",
+        "requested_effect": "active_defense_escort",
+        "justification": "Multi-domain attack chain involving RPO and SATCOM degradation requires escort to maintain link integrity; effects are reversible and limited to defensive posture.",
+        "actor": "Multi-actor",
+        "confidence": 0.64,
+        "kb_citations": [
+          "kb-rpo-ambiguity-001",
+          "kb-satcom-jamming-001",
+          "kb-attribution-uncertainty-001"
+        ],
+        "reversibility": "reversible"
+      }
+    },
+    "metadata": {
+      "scenario": "beat47",
+      "stage": "decide",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:20:50.075280+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "6bb53612ec37b6d516ccb24c3c0f93b3c4daed55557a2be60ab2869014340eb1": {
+    "response": {
+      "actor": "Russia",
+      "confidence": 0.76,
+      "doctrine_match": "kb-gps-jamming-001",
+      "evidence": [
+        "Link-segment GNSS spoofing affecting multiple UAS assets is consistent with Russian EW tradecraft documented in kb-gps-jamming-001.",
+        "Terrestrial-segment credential probing on the brigade C2 gateway during the active PNT interference window is assessed as consistent with Russian multi-domain operational patterns.",
+        "The drone swarm's autonomous relay handoff indicates a resilient response to the link-segment interference, reinforcing the assessment of a coordinated EW/cyber campaign.",
+        "Alternative actors have not been ruled out; kb-attribution-uncertainty-001 applies."
+      ],
+      "predicted_next": "Doctrine suggests the adversary may continue to monitor for secondary gateway vulnerabilities while maintaining localized PNT interference to force further reliance on degraded navigation modes.",
+      "kb_citations": [
+        "kb-gps-jamming-001",
+        "kb-attribution-uncertainty-001"
+      ]
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "attribute_primary",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:21:01.344306+00:00",
+      "prompt_version": "v1"
+    }
+  },
+  "fc2640de2dc790de7290a7ee8e0374f43d408692bf59d847bf60861de418f611": {
+    "response": {
+      "alternative_actor": "China",
+      "objections": [
+        "The use of 'rotating-vps-demo' infrastructure for credential probing is a low-sophistication tactic that deviates from the high-tier, persistent C2 access patterns typically associated with Russian state-sponsored operations.",
+        "The specific timing of the cyber probe during the EW window could be an opportunistic 'noise' event rather than a coordinated multi-domain campaign."
+      ],
+      "confidence_delta": -0.06,
+      "rationale": "While the PNT interference is consistent with Russian doctrine, the cyber component lacks the signature sophistication of Russian GRU/SVR operations, allowing for the possibility of opportunistic actors or state-sponsored proxies utilizing similar EW capabilities."
+    },
+    "metadata": {
+      "scenario": "army_multidomain_attack_chain",
+      "stage": "attribute_redteam",
+      "model": "gemini-3.1-flash-lite",
+      "recorded_at": "2026-10-13T12:21:04.098670+00:00",
+      "prompt_version": "v1"
+    }
+  }
+}
