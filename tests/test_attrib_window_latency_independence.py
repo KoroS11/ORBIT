@@ -11,7 +11,6 @@ window compositions are 100% identical.
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,9 +18,6 @@ from typing import Any
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 from orbit._engine import build_engine, start_engine_tasks
 from orbit.services.scenario_replay import ScenarioReplayService

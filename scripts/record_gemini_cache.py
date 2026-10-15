@@ -23,8 +23,6 @@ from typing import Any
 # Ensure generous budgets inside the recorder process
 os.environ["ORBIT_LLM_SIGNAL_BUDGET_S"] = "180"
 os.environ["ORBIT_GEMINI_MAX_QUEUE_WAIT_S"] = "120"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -504,6 +502,9 @@ async def run_recorder(
 
 
 def main() -> None:
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
     parser = argparse.ArgumentParser(
         description="Record offline Gemini seed cache for demo scenarios."
     )
